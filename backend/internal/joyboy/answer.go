@@ -333,6 +333,18 @@ const noDataAnswerTemplate = joyboyPersona + `
 // conversation. joyboy does not interpret it — it only makes sure the model reads
 // it as "this was said before", not as "this is true now", because the shop's
 // figures move under it constantly.
+// ownerTitleLine is the one dynamic line about the owner: what to call them.
+// It rides in front of the digest — the same "things said before" block, read
+// the same way — so the static persona and rules stay a cacheable prefix and
+// no template gains a placeholder for it.
+func ownerTitleLine(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ""
+	}
+	return "เจ้าของร้านให้เรียกว่า “" + title + "” — ใช้ชื่อนี้เวลาทักทายหรือเอ่ยถึงเขา\n"
+}
+
 func formatDigest(digest string) string {
 	digest = strings.TrimSpace(digest)
 	if digest == "" {

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 20
+	CurrentSchemaVersion int64 = 21
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -377,6 +377,29 @@ func schemaMigrationPlan() []SchemaMigration {
 					`ALTER TABLE ai_conversation_turns ADD COLUMN IF NOT EXISTS latency_ms BIGINT NOT NULL DEFAULT 0`,
 				).Error; err != nil {
 					return fmt.Errorf("add AI conversation turn latency: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 21,
+			Name:    "restaurant_ai_preferences",
+			Up: func(ctx *MigrationContext) error {
+				// The AI settings screen grew sections: which of the seven actions
+				// the assistant may prepare, which bell insights to show, and what
+				// it calls the owner. Three additive columns on the restaurant row.
+				// The two JSONB columns default to NULL on purpose — NULL is "the
+				// owner has not chosen", which the service reads as "everything
+				// on", so a shop that already switched actions on keeps exactly the
+				// behaviour it had.
+				for _, statement := range []string{
+					`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS ai_action_types JSONB`,
+					`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS ai_insight_kinds JSONB`,
+					`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS ai_owner_title VARCHAR(40) NOT NULL DEFAULT ''`,
+				} {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("add restaurant AI preferences: %w", err)
+					}
 				}
 				return nil
 			},

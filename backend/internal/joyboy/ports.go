@@ -106,6 +106,9 @@ type Request struct {
 	// interpret it: what it says, and whether it deserves to be trusted, is
 	// decided where it was written.
 	Digest string
+	// OwnerTitle is what the assistant should call the owner ("คุณผู้จัดการ",
+	// "พี่เก่ง"). Empty leaves the persona as it is.
+	OwnerTitle string
 }
 
 // Answer is what the owner reads, plus the tools that produced it, which the

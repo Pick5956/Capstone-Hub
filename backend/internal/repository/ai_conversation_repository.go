@@ -433,3 +433,19 @@ func containsSnapshotKey(value interface{}) bool {
 	}
 	return false
 }
+
+// DeleteAllConversations removes every conversation the owner has with this
+// restaurant, live or expired. It is the settings screen's "ล้างประวัติแชท
+// ทั้งหมด": turn rows go with the parents through the ON DELETE CASCADE the
+// migration created, the same way CleanupExpired relies on it.
+func (r *AIConversationRepository) DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("AI conversation repository is not connected")
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return 0, errors.New("AI conversation restaurant and owner are required")
+	}
+	result := r.db.Where("restaurant_id = ? AND owner_user_id = ?", restaurantID, ownerUserID).
+		Delete(&entity.AIConversation{})
+	return result.RowsAffected, result.Error
+}

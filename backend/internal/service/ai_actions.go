@@ -149,7 +149,7 @@ func (s *AIService) maybeCreateAIActionPreview(actor AIActorContext, conversatio
 	}
 	// Shadow output is evaluation data only. It must never become authority to
 	// create even a pending write preview.
-	if aiOrchestrationMode() != aiOrchestratorPlanner || !s.ownerActionsEnabled(actor.RestaurantID) {
+	if aiOrchestrationMode() != aiOrchestratorPlanner || !s.actionTypeAllowed(actor.RestaurantID, entity.AIActionTypeSetMenuAvailability) {
 		return nil
 	}
 	if s.actionStore == nil || s.actionMenuResolver == nil {
@@ -314,7 +314,7 @@ func (s *AIService) ConfirmAIActionForOwner(actor AIActorContext, previewID, con
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("AI action requires an authenticated restaurant owner")
 	}
-	if !s.ownerActionsEnabled(actor.RestaurantID) {
+	if !s.actionTypeAllowed(actor.RestaurantID, entity.AIActionTypeSetMenuAvailability) {
 		return nil, ErrAIActionsDisabled
 	}
 	if s.actionStore == nil {

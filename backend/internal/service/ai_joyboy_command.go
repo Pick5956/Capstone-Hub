@@ -68,7 +68,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		if aiDraftsIncludeMenu(drafts) {
 			what = "แก้ข้อมูลร้าน"
 		}
-		response.Answer = fmt.Sprintf("ผมยัง%sให้ไม่ได้ครับ ต้องเปิด “ให้ AI ลงมือทำ” ในตั้งค่า AI ก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน", what)
+		response.Answer = fmt.Sprintf("ผมยัง%sให้ไม่ได้ครับ ต้องเปิด “ให้ผู้ช่วยแก้ข้อมูลร้านได้” ในตั้งค่าผู้ช่วยก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน", what)
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-action-disabled"
@@ -175,6 +175,19 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	}
 
 	draft := BuildAdjustStockPlan(s.actionPorts(), actor.RestaurantID, commands, titles)
+
+	// The owner can leave the master switch on and still keep single kinds of
+	// change off ("เปลี่ยนราคาเมนู" off, everything else on). Those items are
+	// dropped here, after validation named them, so the reply can say which
+	// kind was refused and why — and the rest of the sentence still goes ahead.
+	draft, switchedOff := s.dropSwitchedOffActionTypes(actor.RestaurantID, draft)
+	if len(draft.Items) == 0 && len(switchedOff) > 0 {
+		response.Answer = aiActionTypesOffSentence(switchedOff)
+		response.Intent = AIIntentChat
+		response.Task = AITaskGeneralChat
+		response.Model = "joyboy-action-type-off"
+		return true, ""
+	}
 	if len(draft.Items) == 0 {
 		response.Answer = aiRejectedItemsMessage(draft.Rejected)
 		response.Intent = AIIntentChat
@@ -242,6 +255,9 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	}
 
 	answer := fmt.Sprintf("ผมเตรียม%sแล้ว ยังไม่ได้แก้ข้อมูล กดยืนยันภายใน 1 นาทีครับ", summary)
+	if len(switchedOff) > 0 {
+		notices = append(notices, aiActionTypesOffSentence(switchedOff))
+	}
 	if len(notices) > 0 {
 		answer = strings.Join(notices, "\n") + "\n" + answer
 	}
@@ -424,6 +440,18 @@ func (s *AIService) ConfirmAIActionPlanForOwner(actor AIActorContext, planID, co
 	if s.actionPlanStore == nil || s.actionIngredients == nil {
 		return nil, ErrAIActionUnavailable
 	}
+	// A kind switched off between the card appearing and the button being
+	// pressed must not run. Checked before the claim so a refused plan is left
+	// pending — and cancellable — rather than parked as "executing" until the
+	// claim times out.
+	if pending, err := s.actionPlanStore.FindAIActionPlan(actor.RestaurantID, actor.OwnerUserID, planID); err == nil && pending != nil {
+		prefs := s.preferencesFor(actor.RestaurantID)
+		for _, item := range pending.Items {
+			if !prefs.ActionTypeAllowed(item.ActionType) {
+				return nil, ErrAIActionsDisabled
+			}
+		}
+	}
 
 	plan, replayed, err := s.actionPlanStore.ClaimAIActionPlan(actor.RestaurantID, actor.OwnerUserID, planID, confirmationToken)
 	if err != nil {
@@ -575,4 +603,24 @@ func aiDropRepeats(lines []string) []string {
 		kept = append(kept, line)
 	}
 	return kept
+}
+
+// dropSwitchedOffActionTypes removes the items whose kind the owner has turned
+// off in settings and reports which kinds those were. Items and Previews are
+// parallel slices, so both are rebuilt together.
+func (s *AIService) dropSwitchedOffActionTypes(restaurantID uint, draft AIActionPlanDraft) (AIActionPlanDraft, map[string]struct{}) {
+	prefs := s.preferencesFor(restaurantID)
+	off := map[string]struct{}{}
+	kept := AIActionPlanDraft{Rejected: draft.Rejected}
+	for index, item := range draft.Items {
+		if !prefs.ActionTypeAllowed(item.ActionType) {
+			off[item.ActionType] = struct{}{}
+			continue
+		}
+		kept.Items = append(kept.Items, item)
+		if index < len(draft.Previews) {
+			kept.Previews = append(kept.Previews, draft.Previews[index])
+		}
+	}
+	return kept, off
 }

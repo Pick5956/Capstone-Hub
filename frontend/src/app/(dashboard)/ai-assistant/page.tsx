@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, Minimize2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage, getAISettings } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
@@ -45,6 +45,7 @@ import HoverTip from "@/src/components/shared/HoverTip";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import VoiceWaveform from "@/src/components/shared/VoiceWaveform";
 import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
+import { cacheOwnerTitle, useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
@@ -114,6 +115,9 @@ export default function AIAssistantPage() {
   const router = useRouter();
   const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
+  // The greeting uses whatever the owner asked to be called (settings → ทั่วไป).
+  const welcomeText = useWelcome(language);
+  const followUpsOn = useFollowUpsEnabled();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -162,12 +166,29 @@ export default function AIAssistantPage() {
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
 
+  // Refresh the cached "what to call me" once per visit, so a title set on
+  // another device shows up here without opening settings.
+  useEffect(() => {
+    if (!canUseAI) return;
+    let cancelled = false;
+    getAISettings()
+      .then((res) => {
+        if (cancelled) return;
+        const title = res.data.owner_title;
+        cacheOwnerTitle(title === "คุณผู้จัดการ" ? "" : title);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseAI]);
+
   const storageKey = useMemo(
     () => chatStorageKey(activeMembership?.restaurant_id, user?.ID),
     [activeMembership, user],
   );
 
-  const welcomeMessage = (): Message => ({ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() });
+  const welcomeMessage = (): Message => ({ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() });
 
   // Load shared history (same key as the floating chat) with cleanup + TTL.
   useEffect(() => {
@@ -200,7 +221,7 @@ export default function AIAssistantPage() {
     }, 0);
     return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey, copy.welcome]);
+  }, [storageKey, welcomeText]);
 
   useEffect(() => {
     if (hydratedStorageKey !== storageKey) return;
@@ -271,8 +292,8 @@ export default function AIAssistantPage() {
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
-    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
-  }, [conversationRequests, copy.welcome]);
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() }]);
+  }, [conversationRequests, welcomeText]);
 
   useEffect(() => subscribeToChatClear((clearedKey) => {
     if (clearedKey === storageKey) resetConversation();
@@ -734,7 +755,12 @@ export default function AIAssistantPage() {
               </button>
             </HoverTip>
           </div>
-          <AISettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} language={language} />
+          <AISettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            language={language}
+            onConversationsCleared={resetConversation}
+          />
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
@@ -776,7 +802,7 @@ export default function AIAssistantPage() {
                     saying "restaurant analysis assistant" over the questions the
                     owner came to press. */}
                 <div className="shrink-0">
-                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.welcome}</h2>
+                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{welcomeText}</h2>
                 </div>
               </div>
             ) : (
@@ -817,7 +843,7 @@ export default function AIAssistantPage() {
                     )}
                   </div>
                 </div>
-                {msg.actions && msg.actions.length > 0 && (
+                {followUpsOn && msg.actions && msg.actions.length > 0 && (
                   <AIFollowUpList
                     items={msg.actions}
                     messageId={msg.id}

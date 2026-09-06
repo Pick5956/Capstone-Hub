@@ -81,6 +81,14 @@ func (f *fakeAIOperationsService) AIActionsSettingForOwner(uint) (service.AIActi
 	return service.AIActionsSettingView{}, f.askErr
 }
 
+func (f *fakeAIOperationsService) ApplyAISettingsPatchForOwner(uint, service.AISettingsPatch) error {
+	return nil
+}
+
+func (f *fakeAIOperationsService) DeleteAllConversationsForOwner(service.AIActorContext) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeAIOperationsService) SetAIActionsSettingForOwner(uint, bool) error {
 	return f.askErr
 }

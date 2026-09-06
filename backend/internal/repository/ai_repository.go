@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"Project-M/internal/entity"
@@ -970,4 +973,83 @@ func (r *AIRepository) BillsByNumbers(restaurantID uint, numbers []string) ([]AI
 		bills = append(bills, bill)
 	}
 	return bills, nil
+}
+
+// The owner's AI preferences, stored on the restaurant row.
+//
+// Two JSONB columns and a short text column, read and written together because
+// the settings screen reads them together. A NULL column decodes to a nil map,
+// which the service treats as "nothing chosen yet" — every action allowed,
+// every insight shown.
+
+// AIPreferences mirrors service.AIPreferences. It lives here because the service
+// package imports this one, so the row cannot be typed with the service's
+// struct; the service converts on the way through.
+type AIPreferences struct {
+	ActionTypes  map[string]bool
+	InsightKinds map[string]bool
+	OwnerTitle   string
+}
+
+// aiPreferenceRow is the slice of the restaurant row these methods touch.
+type aiPreferenceRow struct {
+	AIActionTypes  *string
+	AIInsightKinds *string
+	AIOwnerTitle   string
+}
+
+// RestaurantAIPreferences reads the owner's choices for one restaurant.
+func (r *AIRepository) RestaurantAIPreferences(restaurantID uint) (AIPreferences, error) {
+	var row aiPreferenceRow
+	err := r.db.Model(&entity.Restaurant{}).
+		Select("ai_action_types, ai_insight_kinds, ai_owner_title").
+		Where("id = ? AND deleted_at IS NULL", restaurantID).
+		Scan(&row).Error
+	if err != nil {
+		return AIPreferences{}, err
+	}
+	prefs := AIPreferences{OwnerTitle: row.AIOwnerTitle}
+	if row.AIActionTypes != nil && strings.TrimSpace(*row.AIActionTypes) != "" {
+		if err := json.Unmarshal([]byte(*row.AIActionTypes), &prefs.ActionTypes); err != nil {
+			return AIPreferences{}, fmt.Errorf("decode ai_action_types: %w", err)
+		}
+	}
+	if row.AIInsightKinds != nil && strings.TrimSpace(*row.AIInsightKinds) != "" {
+		if err := json.Unmarshal([]byte(*row.AIInsightKinds), &prefs.InsightKinds); err != nil {
+			return AIPreferences{}, fmt.Errorf("decode ai_insight_kinds: %w", err)
+		}
+	}
+	return prefs, nil
+}
+
+// SetRestaurantAIPreferences replaces the owner's choices for one restaurant.
+// A nil map is stored as NULL, so "never chosen" and "chosen everything" stay
+// distinguishable in the row.
+func (r *AIRepository) SetRestaurantAIPreferences(restaurantID uint, prefs AIPreferences) error {
+	encode := func(m map[string]bool) (*string, error) {
+		if m == nil {
+			return nil, nil
+		}
+		raw, err := json.Marshal(m)
+		if err != nil {
+			return nil, err
+		}
+		text := string(raw)
+		return &text, nil
+	}
+	actionTypes, err := encode(prefs.ActionTypes)
+	if err != nil {
+		return fmt.Errorf("encode ai_action_types: %w", err)
+	}
+	insightKinds, err := encode(prefs.InsightKinds)
+	if err != nil {
+		return fmt.Errorf("encode ai_insight_kinds: %w", err)
+	}
+	return r.db.Model(&entity.Restaurant{}).
+		Where("id = ? AND deleted_at IS NULL", restaurantID).
+		Updates(map[string]interface{}{
+			"ai_action_types":  actionTypes,
+			"ai_insight_kinds": insightKinds,
+			"ai_owner_title":   strings.TrimSpace(prefs.OwnerTitle),
+		}).Error
 }

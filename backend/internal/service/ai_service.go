@@ -25,6 +25,7 @@ type AIService struct {
 	actionStore                AIActionStore
 	actionMenuResolver         AIActionMenuResolver
 	actionsSetting             AIActionsSettingStore
+	preferences                AIPreferenceStore
 	actionPlanStore            AIActionPlanStore
 	actionIngredients          AIActionIngredientPort
 	actionMenus                AIActionMenuPort
@@ -131,6 +132,7 @@ func ProvideAIServiceWithStores(
 	// the owner's AI-settings choice — not the env allowlist — gates actions.
 	if repo != nil {
 		service.actionsSetting = repo
+		service.preferences = repo
 	}
 	return service
 }

@@ -283,5 +283,16 @@ func (s *AIService) ProactiveInsightsForOwner(actor AIActorContext) ([]AIInsight
 	if err != nil {
 		return nil, err
 	}
-	return computeProactiveInsights(snapshot), nil
+	// The owner can switch each kind off in settings. Filtered here, after the
+	// cards are computed, so the severity ordering and the caps inside
+	// computeProactiveInsights stay exactly what they are.
+	prefs := s.preferencesFor(actor.RestaurantID)
+	insights := computeProactiveInsights(snapshot)
+	kept := insights[:0]
+	for _, insight := range insights {
+		if prefs.InsightKindShown(insight.Kind) {
+			kept = append(kept, insight)
+		}
+	}
+	return kept, nil
 }

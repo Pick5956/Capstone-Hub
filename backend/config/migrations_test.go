@@ -108,6 +108,10 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// Version 20 adds latency_ms to AI conversation turns — how long the
 		// owner waited for each answer — so the registry moves with it.
 		20: "1d46fef8248ae39fbde5a15d9ef9a06d98bbddfaeb5203ecc990039372173453",
+		// Version 21 adds the owner's AI preferences to Restaurant (per-action
+		// switches, bell kinds, what the assistant calls them), so the registry
+		// moves with it.
+		21: "4f5d0727c7211140f4d3c5c9341f978ca5d78e24237d70bdceaee4d41dd95fe2",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

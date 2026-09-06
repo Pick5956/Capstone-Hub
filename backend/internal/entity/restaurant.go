@@ -27,6 +27,19 @@ type Restaurant struct {
 	// the owner opts in, and every action still needs an explicit confirmation.
 	AIActionsEnabled bool `json:"ai_actions_enabled" gorm:"not null;default:false"`
 
+	// The owner's finer AI preferences, added when the single on/off switch
+	// above grew into a settings screen with sections.
+	//
+	// AIActionTypes is a JSON object of action type → allowed ("set_menu_price":
+	// false). A missing key means allowed, and NULL means every action is
+	// allowed — so a shop that switched actions on before this column existed
+	// keeps exactly the behaviour it had. AIInsightKinds is the same shape for
+	// the proactive bell (insight kind → shown). AIOwnerTitle is what the
+	// assistant calls the owner; empty falls back to "คุณผู้จัดการ".
+	AIActionTypes  *string `json:"ai_action_types,omitempty" gorm:"type:jsonb"`
+	AIInsightKinds *string `json:"ai_insight_kinds,omitempty" gorm:"type:jsonb"`
+	AIOwnerTitle   string  `json:"ai_owner_title" gorm:"size:40;not null;default:''"`
+
 	// Geofence for QR table ordering. A customer must be physically near the
 	// restaurant to send an order straight to the kitchen. OrderRadiusMeters = 0
 	// (or missing coordinates) disables the check entirely.

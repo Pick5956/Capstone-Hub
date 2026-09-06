@@ -77,6 +77,10 @@ func (f *fakeAIConversationStore) UpdateState(restaurantID, ownerUserID uint, co
 	return nil
 }
 
+func (f *fakeAIConversationStore) DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeAIConversationStore) DeleteConversation(restaurantID, ownerUserID uint, conversationID string) error {
 	f.deleteCalls++
 	return f.err

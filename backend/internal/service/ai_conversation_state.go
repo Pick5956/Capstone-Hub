@@ -32,6 +32,8 @@ type AIConversationStore interface {
 	ListRecentTurns(restaurantID, ownerUserID uint, conversationID string, limit int) ([]entity.AIConversationTurn, error)
 	AppendTurn(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, turn *entity.AIConversationTurn, nextStateJSON string) error
 	DeleteConversation(restaurantID, ownerUserID uint, conversationID string) error
+	// DeleteAllConversations is the settings screen's "ล้างประวัติแชททั้งหมด".
+	DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error)
 	CleanupExpired(limit int) (int64, error)
 	// UpdateState replaces the stored state without appending a turn. The
 	// repository has always had it; the digest is the first caller.
@@ -353,6 +355,19 @@ func (s *AIService) DeleteConversationForOwner(actor AIActorContext, conversatio
 		return errors.New("AI conversation memory is not configured")
 	}
 	return s.conversationStore.DeleteConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
+}
+
+// DeleteAllConversationsForOwner forgets every conversation the owner has with
+// this restaurant — the thread on screen and every older one — and reports how
+// many went. The next question starts a fresh thread with no digest.
+func (s *AIService) DeleteAllConversationsForOwner(actor AIActorContext) (int64, error) {
+	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
+		return 0, errors.New("authenticated restaurant owner context is required")
+	}
+	if s.conversationStore == nil {
+		return 0, errors.New("AI conversation memory is not configured")
+	}
+	return s.conversationStore.DeleteAllConversations(actor.RestaurantID, actor.OwnerUserID)
 }
 
 func (s *AIService) maybeCleanupExpiredConversations() {

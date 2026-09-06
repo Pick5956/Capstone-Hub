@@ -17,6 +17,7 @@ import {
   Minimize2
 } from "lucide-react";
 import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
+import { useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
@@ -170,6 +171,8 @@ export default function AIOperationsFloatingChat() {
   const router = useRouter();
   const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
+  const welcomeText = useWelcome(language);
+  const followUpsOn = useFollowUpsEnabled();
   const labels = useMemo(() => language === "th"
     ? {
         openAssistant: "เปิดผู้ช่วย AI",
@@ -266,7 +269,7 @@ export default function AIOperationsFloatingChat() {
       const stored = loadStoredMessages<StoredMessage>(storageKey);
       setMessages(stored && stored.length > 0
         ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
-        : [{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+        : [{ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() }]);
       // The server holds one pending plan at a time and it survives a page
       // switch; the card that goes with it has to survive too, or the owner is
       // told to answer a card that is no longer anywhere on screen.
@@ -277,7 +280,7 @@ export default function AIOperationsFloatingChat() {
       setHydratedStorageKey(storageKey);
     }, 0);
     return () => window.clearTimeout(loadTimer);
-  }, [conversationRequests, storageKey, copy.welcome]);
+  }, [conversationRequests, storageKey, welcomeText]);
 
   // Persist to the shared key; a lone welcome message is not persisted.
   useEffect(() => {
@@ -379,8 +382,8 @@ export default function AIOperationsFloatingChat() {
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
-    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
-  }, [conversationRequests, copy.welcome]);
+    setMessages([{ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() }]);
+  }, [conversationRequests, welcomeText]);
 
   useEffect(() => subscribeToChatClear((clearedKey) => {
     if (clearedKey === storageKey) resetConversation();
@@ -998,7 +1001,7 @@ export default function AIOperationsFloatingChat() {
                   className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
                 />
                 <h2 className="shrink-0 text-base font-semibold text-gray-950 dark:text-white">
-                  {copy.welcome}
+                  {welcomeText}
                 </h2>
                 <div className="flex flex-wrap justify-center gap-2">
                   {copy.quickQuestions.map((question) => (
@@ -1045,7 +1048,7 @@ export default function AIOperationsFloatingChat() {
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                   </div>
                 </div>
-                {msg.actions && msg.actions.length > 0 && (
+                {followUpsOn && msg.actions && msg.actions.length > 0 && (
                   <AIFollowUpList
                     items={msg.actions}
                     messageId={msg.id}

@@ -23,4 +23,5 @@ func SetupAIRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/ai/operations/actions/:previewID/confirm", rateLimitRequests(10, time.Minute), aiCtrl.ConfirmAction)
 	v1.DELETE("/ai/operations/actions/:previewID", rateLimitRequests(10, time.Minute), aiCtrl.CancelAction)
 	v1.DELETE("/ai/operations/conversations/:conversationID", rateLimitRequests(20, time.Minute), aiCtrl.DeleteConversation)
+	v1.DELETE("/ai/operations/conversations", rateLimitRequests(5, time.Minute), aiCtrl.DeleteAllConversations)
 }

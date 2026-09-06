@@ -75,16 +75,49 @@ export const getOperationsSnapshot = () =>
 export const getProactiveInsights = () =>
   apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");
 
+// The seven kinds of change the assistant can prepare, in the order the
+// settings screen lists them. Keys match entity.AIActionType* on the backend.
+export const AI_ACTION_TYPES = [
+  "set_menu_availability",
+  "set_menu_price",
+  "adjust_ingredient_stock",
+  "set_ingredient_min_stock",
+  "set_ingredient_cost",
+  "create_ingredient",
+  "create_expense",
+] as const;
+export type AIActionType = (typeof AI_ACTION_TYPES)[number];
+
+// The proactive bell's kinds. sales_drop and sales_up are one switch on the
+// settings screen; the screen writes both.
+export const AI_INSIGHT_KINDS = ["ingredient_low", "dead_stock", "sales_drop", "sales_up", "plowhorse"] as const;
+export type AIInsightKind = (typeof AI_INSIGHT_KINDS)[number];
+
 export type AISettingsView = {
   actions_enabled: boolean;
   feature_available: boolean;
+  action_types: Record<AIActionType, boolean>;
+  insight_kinds: Record<AIInsightKind, boolean>;
+  owner_title: string;
+};
+
+// One change from the settings screen: every field optional, the backend keeps
+// what is not sent.
+export type AISettingsPatch = {
+  actions_enabled?: boolean;
+  action_types?: Partial<Record<AIActionType, boolean>>;
+  insight_kinds?: Partial<Record<AIInsightKind, boolean>>;
+  owner_title?: string;
 };
 
 export const getAISettings = () =>
   apiClient.get<AISettingsView>("/api/v1/ai/operations/settings");
 
-export const updateAISettings = (actionsEnabled: boolean) =>
-  apiClient.put<AISettingsView>("/api/v1/ai/operations/settings", { actions_enabled: actionsEnabled });
+export const updateAISettings = (patch: AISettingsPatch) =>
+  apiClient.put<AISettingsView>("/api/v1/ai/operations/settings", patch);
+
+export const deleteAllAIConversations = () =>
+  apiClient.delete<{ deleted: number }>("/api/v1/ai/operations/conversations");
 
 export const extractReceipt = (imageBase64: string, mimeType: string) =>
   apiClient.post<{ draft: AIReceiptDraft }>(

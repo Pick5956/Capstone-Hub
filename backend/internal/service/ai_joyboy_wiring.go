@@ -911,9 +911,10 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	}
 
 	answer, err := assistant.Ask(ctx, joyboy.Request{
-		Question: request.Question,
-		History:  joyboyHistory(request.History),
-		Digest:   request.Digest,
+		Question:   request.Question,
+		History:    joyboyHistory(request.History),
+		Digest:     request.Digest,
+		OwnerTitle: s.preferencesFor(actor.RestaurantID).OwnerTitle,
 	})
 	if err != nil {
 		if errors.Is(err, joyboy.ErrUnavailable) {

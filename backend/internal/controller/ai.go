@@ -32,6 +32,8 @@ type AIOperationsService interface {
 	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
 	AIActionsSettingForOwner(restaurantID uint) (service.AIActionsSettingView, error)
 	SetAIActionsSettingForOwner(restaurantID uint, enabled bool) error
+	ApplyAISettingsPatchForOwner(restaurantID uint, patch service.AISettingsPatch) error
+	DeleteAllConversationsForOwner(actor service.AIActorContext) (int64, error)
 	ConfirmAIActionPlanForOwner(actor service.AIActorContext, planID, confirmationToken string) (*service.AIActionPlanConfirmation, error)
 	CancelAIActionPlanForOwner(actor service.AIActorContext, planID string) error
 }
@@ -296,14 +298,14 @@ func (ctrl *AIController) UpdateAISettings(c *gin.Context) {
 	if !requireAIOwner(c) {
 		return
 	}
-	var input struct {
-		ActionsEnabled bool `json:"actions_enabled"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Every field is optional: the settings screen saves each switch as it is
+	// flipped, and a save carries only what changed.
+	var patch service.AISettingsPatch
+	if err := c.ShouldBindJSON(&patch); err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	if err := ctrl.svc.SetAIActionsSettingForOwner(restaurantID, input.ActionsEnabled); err != nil {
+	if err := ctrl.svc.ApplyAISettingsPatchForOwner(restaurantID, patch); err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
@@ -514,6 +516,33 @@ func decodeAIActionConfirmationRequest(c *gin.Context, request *service.AIAction
 		return errors.New("invalid confirmation token")
 	}
 	return nil
+}
+
+// DeleteAllConversations is the settings screen's "ล้างประวัติแชททั้งหมด": every
+// conversation the owner has with this restaurant, gone in one call.
+func (ctrl *AIController) DeleteAllConversations(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	deleted, err := ctrl.svc.DeleteAllConversationsForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	})
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
 }
 
 func (ctrl *AIController) DeleteConversation(c *gin.Context) {
