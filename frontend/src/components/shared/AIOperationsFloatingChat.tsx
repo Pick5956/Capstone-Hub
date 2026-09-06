@@ -14,6 +14,7 @@ import {
 import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import { useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
+import { ORB_DEFAULT_PALETTE, orbPaletteForSurface, parseCssRgb, type OrbPalette } from "@/src/lib/orbPalette";
 
 // The draggable orb: its size (h-14), how far a press may travel and still be
 // a tap, and where its resting place is remembered on this device.
@@ -161,6 +162,23 @@ export default function AIOperationsFloatingChat() {
   const [viewport, setViewport] = useState<{ w: number; h: number } | null>(null);
   const orbPressRef = useRef<{ pointerId: number; startX: number; startY: number; offsetX: number; offsetY: number; moved: boolean } | null>(null);
   const orbSkipClickRef = useRef(false);
+  const orbRef = useRef<HTMLButtonElement | null>(null);
+  // The orb takes its colours from the surface it settled on (see orbPalette).
+  const [orbPalette, setOrbPalette] = useState<OrbPalette>(ORB_DEFAULT_PALETTE);
+  const sampleOrbSurface = useCallback(() => {
+    const orb = orbRef.current;
+    if (!orb || typeof document.elementsFromPoint !== "function") return;
+    const rect = orb.getBoundingClientRect();
+    const stack = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    for (const element of stack) {
+      if (orb.contains(element)) continue;
+      const rgb = parseCssRgb(getComputedStyle(element).backgroundColor);
+      if (!rgb || rgb.a < 0.5) continue;
+      setOrbPalette(orbPaletteForSurface(rgb));
+      return;
+    }
+    setOrbPalette(ORB_DEFAULT_PALETTE);
+  }, []);
   useEffect(() => {
     const measure = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
     measure();
@@ -178,6 +196,12 @@ export default function AIOperationsFloatingChat() {
     }
     return () => window.removeEventListener("resize", measure);
   }, []);
+  useEffect(() => {
+    if (orbDrag || isOpen) return;
+    // After the snap transition (200ms) so the sample is taken where it landed.
+    const timer = window.setTimeout(sampleOrbSurface, 260);
+    return () => window.clearTimeout(timer);
+  }, [orbSpot, viewport, pathname, isOpen, orbDrag, sampleOrbSurface]);
   const orbMargin = viewport && viewport.w >= 640 ? 24 : 16;
   const clampOrbTop = (top: number) => {
     if (!viewport) return top;
@@ -1113,18 +1137,19 @@ export default function AIOperationsFloatingChat() {
         onPointerMove={onOrbPointerMove}
         onPointerUp={onOrbPointerUp}
         onPointerCancel={onOrbPointerUp}
+        ref={orbRef}
         style={orbStyle}
         className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 touch-none select-none items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu ease-out sm:bottom-6 sm:right-6 ${
           orbDrag
             ? "cursor-grabbing scale-105 shadow-2xl shadow-orange-500/40 transition-none"
             : "cursor-grab transition-[opacity,transform,box-shadow,left,top] duration-200 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98]"
-        } ${
+        } ${orbPalette.ring ? "ring-2 ring-white/80" : ""} ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 pointer-events-auto"
         }`}
       >
-        <SiriOrb size="66px" className="shrink-0" animationDuration={8} />
+        <SiriOrb size="66px" className="shrink-0" animationDuration={8} colors={orbPalette.colors} />
       </button>
     </>
   );
