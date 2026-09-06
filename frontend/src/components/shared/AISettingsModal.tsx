@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, Check, ChevronLeft, ChevronRight, Loader2, Settings2, SlidersHorizontal, Trash2, Wand2, X } from "lucide-react";
 import {
   AI_ACTION_TYPES,
@@ -234,7 +235,7 @@ export default function AISettingsModal({
     if (savedTimer.current) window.clearTimeout(savedTimer.current);
   }, []);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   // Every switch saves on its own. The screen updates first and the request
   // follows; on failure the previous view comes back and the header says so.
@@ -468,8 +469,12 @@ export default function AISettingsModal({
     </>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
+  // Portalled to <body>. The AI page's root isolates its stacking context (for
+  // the aura layers), so a dialog rendered inside it can never rise above the
+  // phone's top bar no matter its z-index — on a phone the header with the
+  // back button sat under that bar and the sheet could not be left.
+  return createPortal(
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
       <div
         className="flex h-full w-full overflow-hidden bg-white shadow-xl dark:bg-gray-950 sm:h-[560px] sm:max-h-[85vh] sm:max-w-3xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -564,6 +569,7 @@ export default function AISettingsModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
