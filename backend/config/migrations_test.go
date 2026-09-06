@@ -122,6 +122,10 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// between them, so both carry the merged registry's hash.
 		21: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
 		22: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
+		// Version 23 adds title, trash and per-turn display data to the AI
+		// conversation tables, which live outside the frozen registry (created
+		// by migration 8's own AutoMigrate), so the fingerprint is unchanged.
+		23: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
@@ -246,7 +250,10 @@ func TestAdditiveMigrationModelFingerprintsStayFrozen(t *testing.T) {
 		{
 			name:   "version 8 conversations",
 			models: []any{&entity.AIConversation{}, &entity.AIConversationTurn{}},
-			want:   "f1f926bb1052ed0fad231a128cd78a46378d3c05d82284662fa3f5e56dc3f2a9", // refrozen at v20: latency_ms added to the turn row,
+			// refrozen at v20 (latency_ms on the turn) and again at v23: title,
+			// title_by_owner and trashed_at on the conversation, display_json on
+			// the turn — the chat list and the trash.
+			want:   "2fa35e7062c9b82296f857dfb37e8edcdf3a1956efa7fb8b465e4535e607e63f",
 		},
 		{
 			name:   "version 9 action previews",

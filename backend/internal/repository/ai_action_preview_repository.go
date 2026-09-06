@@ -443,7 +443,7 @@ func validateAIActionContextScope(tx *gorm.DB, restaurantID, ownerUserID uint, c
 	}
 	var conversation entity.AIConversation
 	if err := tx.Select("id").
-		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND expires_at > ?", *conversationID, restaurantID, ownerUserID, now).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NULL", *conversationID, restaurantID, ownerUserID).
 		First(&conversation).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrAIActionPreviewNotFound

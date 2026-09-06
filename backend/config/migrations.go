@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 22
+	CurrentSchemaVersion int64 = 23
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -418,6 +418,33 @@ func schemaMigrationPlan() []SchemaMigration {
 				} {
 					if err := ctx.DB.Exec(statement).Error; err != nil {
 						return fmt.Errorf("add restaurant AI preferences: %w", err)
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 23,
+			Name:    "ai_conversation_threads",
+			Up: func(ctx *MigrationContext) error {
+				// Many chats per owner, like a chat app: each conversation gets a
+				// title and a trash timestamp, and each turn keeps what the screen
+				// needs to show the answer again (chart, forecast, tools). All
+				// additive. Existing chats are titled from their first stored
+				// question so the list is never blank on the day this ships.
+				for _, statement := range []string{
+					`ALTER TABLE ai_conversations ADD COLUMN IF NOT EXISTS title VARCHAR(80) NOT NULL DEFAULT ''`,
+					`ALTER TABLE ai_conversations ADD COLUMN IF NOT EXISTS title_by_owner BOOLEAN NOT NULL DEFAULT false`,
+					`ALTER TABLE ai_conversations ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMPTZ NULL`,
+					`CREATE INDEX IF NOT EXISTS idx_ai_conversations_trash ON ai_conversations (restaurant_id, owner_user_id, trashed_at)`,
+					`ALTER TABLE ai_conversation_turns ADD COLUMN IF NOT EXISTS display_json JSONB NOT NULL DEFAULT '{}'`,
+					`UPDATE ai_conversations c SET title = left(regexp_replace(t.question, '\s+', ' ', 'g'), 40)
+					 FROM ai_conversation_turns t
+					 WHERE t.conversation_id = c.id AND c.title = ''
+					   AND t.sequence = (SELECT min(m.sequence) FROM ai_conversation_turns m WHERE m.conversation_id = c.id)`,
+				} {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("add AI conversation threads: %w", err)
 					}
 				}
 				return nil

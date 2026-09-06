@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Project-M/internal/repository"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -77,7 +78,31 @@ func (f *fakeAIConversationStore) UpdateState(restaurantID, ownerUserID uint, co
 	return nil
 }
 
-func (f *fakeAIConversationStore) DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error) {
+func (f *fakeAIConversationStore) ListConversations(uint, uint, bool, int) ([]repository.AIConversationSummary, error) {
+	return nil, nil
+}
+
+func (f *fakeAIConversationStore) ListTurnsPage(uint, uint, string, uint64, int) ([]entity.AIConversationTurn, error) {
+	return nil, nil
+}
+
+func (f *fakeAIConversationStore) RenameConversation(uint, uint, string, string) error { return nil }
+
+func (f *fakeAIConversationStore) AutoTitleConversation(uint, uint, string, string) error {
+	return nil
+}
+
+func (f *fakeAIConversationStore) TrashConversation(uint, uint, string) error {
+	f.deleteCalls++
+	return nil
+}
+func (f *fakeAIConversationStore) RestoreConversation(uint, uint, string) error { return nil }
+
+func (f *fakeAIConversationStore) TrashAllConversations(uint, uint) (int64, error) { return 0, nil }
+func (f *fakeAIConversationStore) PurgeAllTrashed(uint, uint) (int64, error)       { return 0, nil }
+
+func (f *fakeAIConversationStore) PurgeTrashed(time.Time, int) (int64, error) {
+	f.cleanupCalls++
 	return 0, nil
 }
 
@@ -86,10 +111,7 @@ func (f *fakeAIConversationStore) DeleteConversation(restaurantID, ownerUserID u
 	return f.err
 }
 
-func (f *fakeAIConversationStore) CleanupExpired(limit int) (int64, error) {
-	f.cleanupCalls++
-	return 0, f.err
-}
+
 
 func TestPrepareConversationSessionCreatesBackendOwnedConversation(t *testing.T) {
 	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "true")

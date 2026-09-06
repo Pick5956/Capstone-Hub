@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Project-M/internal/repository"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,9 @@ const (
 	// must stay in step with structuredPlannerMaxContextItems (the message-count cap
 	// every history path is trimmed to) or the extra turns are silently dropped.
 	aiConversationContextTurnLimit = 20
+	// aiConversationTrashRetention is how long a deleted chat can still be
+	// brought back before the purge removes it.
+	aiConversationTrashRetention = 7 * 24 * time.Hour
 	aiConversationCleanupEvery     = 100
 	aiConversationStateVersion     = "1.0"
 )
@@ -31,10 +35,20 @@ type AIConversationStore interface {
 	FindActiveConversation(restaurantID, ownerUserID uint, conversationID string) (*entity.AIConversation, error)
 	ListRecentTurns(restaurantID, ownerUserID uint, conversationID string, limit int) ([]entity.AIConversationTurn, error)
 	AppendTurn(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, turn *entity.AIConversationTurn, nextStateJSON string) error
+	// DeleteConversation removes a chat for good; the screens reach it only
+	// from the trash. Deleting from the list is TrashConversation.
 	DeleteConversation(restaurantID, ownerUserID uint, conversationID string) error
-	// DeleteAllConversations is the settings screen's "ล้างประวัติแชททั้งหมด".
-	DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error)
-	CleanupExpired(limit int) (int64, error)
+	// The chat list: many conversations per owner, a title each, a trash that
+	// holds a deleted chat for seven days.
+	ListConversations(restaurantID, ownerUserID uint, trashed bool, limit int) ([]repository.AIConversationSummary, error)
+	ListTurnsPage(restaurantID, ownerUserID uint, conversationID string, beforeSequence uint64, limit int) ([]entity.AIConversationTurn, error)
+	RenameConversation(restaurantID, ownerUserID uint, conversationID, title string) error
+	AutoTitleConversation(restaurantID, ownerUserID uint, conversationID, title string) error
+	TrashConversation(restaurantID, ownerUserID uint, conversationID string) error
+	RestoreConversation(restaurantID, ownerUserID uint, conversationID string) error
+	TrashAllConversations(restaurantID, ownerUserID uint) (int64, error)
+	PurgeAllTrashed(restaurantID, ownerUserID uint) (int64, error)
+	PurgeTrashed(olderThan time.Time, limit int) (int64, error)
 	// UpdateState replaces the stored state without appending a turn. The
 	// repository has always had it; the digest is the first caller.
 	UpdateState(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, nextStateJSON string) error
@@ -354,7 +368,7 @@ func (s *AIService) DeleteConversationForOwner(actor AIActorContext, conversatio
 	if s.conversationStore == nil {
 		return errors.New("AI conversation memory is not configured")
 	}
-	return s.conversationStore.DeleteConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
+	return s.conversationStore.TrashConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
 }
 
 // DeleteAllConversationsForOwner forgets every conversation the owner has with
@@ -367,7 +381,7 @@ func (s *AIService) DeleteAllConversationsForOwner(actor AIActorContext) (int64,
 	if s.conversationStore == nil {
 		return 0, errors.New("AI conversation memory is not configured")
 	}
-	return s.conversationStore.DeleteAllConversations(actor.RestaurantID, actor.OwnerUserID)
+	return s.conversationStore.TrashAllConversations(actor.RestaurantID, actor.OwnerUserID)
 }
 
 func (s *AIService) maybeCleanupExpiredConversations() {
@@ -378,7 +392,8 @@ func (s *AIService) maybeCleanupExpiredConversations() {
 	if count != 1 && count%aiConversationCleanupEvery != 0 {
 		return
 	}
-	if _, err := s.conversationStore.CleanupExpired(500); err != nil {
-		aiStage("warn", "expired conversation cleanup failed: %v", err)
+	// Chats are kept until the owner deletes them; what expires is the trash.
+	if _, err := s.conversationStore.PurgeTrashed(repository.BangkokNow().Add(-aiConversationTrashRetention), 500); err != nil {
+		aiStage("warn", "trashed conversation purge failed: %v", err)
 	}
 }

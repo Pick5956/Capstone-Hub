@@ -12,8 +12,19 @@ type AIConversation struct {
 	StateJSON        string    `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
 	Version          uint64    `json:"version" gorm:"not null;default:1;check:ai_conversations_version_positive,version > 0"`
 	NextTurnSequence uint64    `json:"-" gorm:"not null;default:1;check:ai_conversations_next_sequence_positive,next_turn_sequence > 0"`
-	ExpiresAt        time.Time `json:"expires_at" gorm:"not null;index:idx_ai_conversations_expires_at"`
-	CreatedAt        time.Time `json:"created_at"`
+	// ExpiresAt is written on every turn but no longer read: chats are kept until
+	// the owner deletes them. The column stays so an older row still validates.
+	ExpiresAt time.Time `json:"expires_at" gorm:"not null;index:idx_ai_conversations_expires_at"`
+	// Title is what the chat list shows — the owner's own words once they rename
+	// it (TitleByOwner), otherwise the opening question cut short by Go.
+	Title        string `json:"title" gorm:"size:80;not null;default:''"`
+	TitleByOwner bool   `json:"title_by_owner" gorm:"not null;default:false"`
+	// TrashedAt is set when the owner deletes the chat. It stays in the trash,
+	// restorable, for seven days; then the purge removes it for good. Named
+	// trashed_at rather than deleted_at so GORM never mistakes it for its own
+	// soft-delete column and starts hiding rows on its own.
+	TrashedAt *time.Time `json:"trashed_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" gorm:"index:idx_ai_conversations_owner_activity,priority:3,sort:desc"`
 
 	Restaurant *Restaurant `json:"-" gorm:"foreignKey:RestaurantID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
@@ -38,6 +49,11 @@ type AIConversationTurn struct {
 	ResolvedPlanJSON     string    `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
 	ContextDeltaJSON     string    `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
 	ResultEntityRefsJSON string    `json:"-" gorm:"type:jsonb;not null;default:'[]'"`
+	// DisplayJSON is what the screen needs to show this answer again: the chart
+	// or forecast that went with it, the tools that produced it, the manual
+	// pages it cited. Reopening a chat used to give text alone, because none of
+	// that was kept. Bounded, and never a snapshot — the repository refuses one.
+	DisplayJSON string `json:"display_json,omitempty" gorm:"type:jsonb;not null;default:'{}'"`
 	// LatencyMS is how long the owner waited for this answer, request in to
 	// response out. Kept on the turn so a slow afternoon can be told apart from
 	// a slow question after the server log is gone: an answer that took 117

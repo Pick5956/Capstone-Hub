@@ -23,7 +23,13 @@ const (
 	AIConversationTurnMetadataMaxBytes = 32 * 1024
 	AIConversationQuestionMaxRunes     = 800
 	AIConversationAnswerMaxRunes       = 16 * 1024
-	AIConversationMaxStoredTurns       = 50
+	// AIConversationMaxStoredTurns used to be a cap on the table: the fifty-first
+	// turn deleted the first. Chats are kept whole now; the name stays because
+	// it still bounds how many turns one prompt load may read.
+	AIConversationMaxStoredTurns = 50
+	// AIConversationDisplayMaxBytes bounds what a turn keeps for the screen —
+	// a chart is a few hundred bytes, a forecast a few kilobytes.
+	AIConversationDisplayMaxBytes = 64 * 1024
 	// Six was chosen when the prompt showed the model two exchanges: loading more
 	// than it could read was waste. The prompt now takes what fits a character
 	// budget and summarises what does not, so the loader must hand it enough to do
@@ -99,7 +105,7 @@ func (r *AIConversationRepository) FindActiveConversation(restaurantID, ownerUse
 
 	var conversation entity.AIConversation
 	err = r.db.
-		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND expires_at > ?", id, restaurantID, ownerUserID, r.currentTime()).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NULL", id, restaurantID, ownerUserID).
 		First(&conversation).Error
 	if err != nil {
 		return nil, err
@@ -131,7 +137,7 @@ func (r *AIConversationRepository) UpdateState(restaurantID, ownerUserID uint, c
 
 	now := r.currentTime()
 	result := r.db.Model(&entity.AIConversation{}).
-		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND expires_at > ? AND version = ?", id, restaurantID, ownerUserID, now, expectedVersion).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NULL AND version = ?", id, restaurantID, ownerUserID, expectedVersion).
 		Updates(map[string]interface{}{
 			"state_json": state,
 			"version":    gorm.Expr("version + 1"),
@@ -196,6 +202,10 @@ func (r *AIConversationRepository) AppendTurn(restaurantID, ownerUserID uint, co
 	if err != nil {
 		return fmt.Errorf("AI conversation entity references: %w", err)
 	}
+	display, err := normalizeConversationJSONObject(turn.DisplayJSON, AIConversationDisplayMaxBytes)
+	if err != nil {
+		return fmt.Errorf("AI conversation display: %w", err)
+	}
 	if len([]rune(strings.TrimSpace(turn.Task))) > 48 || len([]rune(strings.TrimSpace(turn.Tool))) > 96 {
 		return errors.New("AI conversation task or tool is too long")
 	}
@@ -208,12 +218,13 @@ func (r *AIConversationRepository) AppendTurn(restaurantID, ownerUserID uint, co
 	turn.ResolvedPlanJSON = plan
 	turn.ContextDeltaJSON = delta
 	turn.ResultEntityRefsJSON = refs
+	turn.DisplayJSON = display
 
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		now := r.currentTime()
 		var conversation entity.AIConversation
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND expires_at > ?", conversationID, restaurantID, ownerUserID, now).
+			Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NULL", conversationID, restaurantID, ownerUserID).
 			First(&conversation).Error; err != nil {
 			return err
 		}
@@ -227,10 +238,6 @@ func (r *AIConversationRepository) AppendTurn(restaurantID, ownerUserID uint, co
 		if err := tx.Omit("Conversation").Create(turn).Error; err != nil {
 			return err
 		}
-		if err := pruneOldConversationTurns(tx, conversation.ID, turn.Sequence); err != nil {
-			return err
-		}
-
 		result := tx.Model(&entity.AIConversation{}).
 			Where("id = ? AND version = ?", conversation.ID, expectedVersion).
 			Updates(map[string]interface{}{
@@ -248,16 +255,6 @@ func (r *AIConversationRepository) AppendTurn(restaurantID, ownerUserID uint, co
 		}
 		return nil
 	})
-}
-
-func pruneOldConversationTurns(database *gorm.DB, conversationID string, newestSequence uint64) error {
-	if newestSequence <= AIConversationMaxStoredTurns {
-		return nil
-	}
-	oldestSequenceToDelete := newestSequence - AIConversationMaxStoredTurns
-	return database.
-		Where("conversation_id = ? AND sequence <= ?", conversationID, oldestSequenceToDelete).
-		Delete(&entity.AIConversationTurn{}).Error
 }
 
 // ListRecentTurns returns the newest bounded context in chronological order so
@@ -283,7 +280,7 @@ func (r *AIConversationRepository) ListRecentTurns(restaurantID, ownerUserID uin
 	var turns []entity.AIConversationTurn
 	err = r.db.Model(&entity.AIConversationTurn{}).
 		Joins("JOIN ai_conversations AS conversation_scope ON conversation_scope.id = ai_conversation_turns.conversation_id").
-		Where("conversation_scope.id = ? AND conversation_scope.restaurant_id = ? AND conversation_scope.owner_user_id = ? AND conversation_scope.expires_at > ?", id, restaurantID, ownerUserID, r.currentTime()).
+		Where("conversation_scope.id = ? AND conversation_scope.restaurant_id = ? AND conversation_scope.owner_user_id = ? AND conversation_scope.trashed_at IS NULL", id, restaurantID, ownerUserID).
 		Order("ai_conversation_turns.sequence DESC").
 		Limit(limit).
 		Find(&turns).Error
@@ -313,7 +310,10 @@ func (r *AIConversationRepository) DeleteConversation(restaurantID, ownerUserID 
 
 // CleanupExpired deletes only expired parents in a bounded batch. Turn rows are
 // removed by the migration-created ON DELETE CASCADE constraint.
-func (r *AIConversationRepository) CleanupExpired(limit int) (int64, error) {
+// PurgeTrashed removes, for good, the chats that have sat in the trash longer
+// than olderThan allows. Turn rows go with them through ON DELETE CASCADE.
+// Bounded per call so the sweep that runs between questions stays short.
+func (r *AIConversationRepository) PurgeTrashed(olderThan time.Time, limit int) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("AI conversation repository is not connected")
 	}
@@ -323,13 +323,12 @@ func (r *AIConversationRepository) CleanupExpired(limit int) (int64, error) {
 	if limit > maxConversationCleanupLimit {
 		limit = maxConversationCleanupLimit
 	}
-
-	expiredIDs := r.db.Model(&entity.AIConversation{}).
+	trashedIDs := r.db.Model(&entity.AIConversation{}).
 		Select("id").
-		Where("expires_at <= ?", r.currentTime()).
-		Order("expires_at ASC").
+		Where("trashed_at IS NOT NULL AND trashed_at <= ?", olderThan).
+		Order("trashed_at ASC").
 		Limit(limit)
-	result := r.db.Where("id IN (?)", expiredIDs).Delete(&entity.AIConversation{})
+	result := r.db.Where("id IN (?)", trashedIDs).Delete(&entity.AIConversation{})
 	return result.RowsAffected, result.Error
 }
 
@@ -434,18 +433,226 @@ func containsSnapshotKey(value interface{}) bool {
 	return false
 }
 
-// DeleteAllConversations removes every conversation the owner has with this
-// restaurant, live or expired. It is the settings screen's "ล้างประวัติแชท
-// ทั้งหมด": turn rows go with the parents through the ON DELETE CASCADE the
-// migration created, the same way CleanupExpired relies on it.
-func (r *AIConversationRepository) DeleteAllConversations(restaurantID, ownerUserID uint) (int64, error) {
+// The chat list.
+//
+// One conversation per owner was the whole model until now; these read and
+// change many. Every method is scoped by restaurant and owner the way the rest
+// of this file is, so a chat can never be listed, renamed or trashed across
+// that line.
+
+// AIConversationSummary is one row of the chat list: enough to show and sort
+// it, none of the transcript.
+type AIConversationSummary struct {
+	ID           string     `json:"id"`
+	Title        string     `json:"title"`
+	TitleByOwner bool       `json:"title_by_owner"`
+	TurnCount    int64      `json:"turn_count"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	TrashedAt    *time.Time `json:"trashed_at,omitempty"`
+}
+
+const (
+	defaultConversationListLimit = 100
+	maxConversationListLimit     = 500
+	defaultConversationPageLimit = 50
+	maxConversationPageLimit     = 200
+	// AIConversationTitleMaxRunes bounds a title the owner types.
+	AIConversationTitleMaxRunes = 80
+)
+
+// ListConversations returns the owner's chats newest-activity first — the live
+// ones, or the trash when trashed is set. A conversation that never received a
+// turn (the question failed before the answer was stored) is not a chat and is
+// left out.
+func (r *AIConversationRepository) ListConversations(restaurantID, ownerUserID uint, trashed bool, limit int) ([]AIConversationSummary, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("AI conversation repository is not connected")
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return nil, errors.New("AI conversation restaurant and owner are required")
+	}
+	if limit <= 0 {
+		limit = defaultConversationListLimit
+	}
+	if limit > maxConversationListLimit {
+		limit = maxConversationListLimit
+	}
+	trashFilter := "trashed_at IS NULL"
+	if trashed {
+		trashFilter = "trashed_at IS NOT NULL"
+	}
+	var rows []AIConversationSummary
+	err := r.db.Model(&entity.AIConversation{}).
+		Select("id, title, title_by_owner, next_turn_sequence - 1 AS turn_count, created_at, updated_at, trashed_at").
+		Where("restaurant_id = ? AND owner_user_id = ? AND next_turn_sequence > 1 AND "+trashFilter, restaurantID, ownerUserID).
+		Order("updated_at DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
+}
+
+// ListTurnsPage reads one page of a chat's transcript, the newest page first:
+// the limit turns before beforeSequence (0 = from the end), returned oldest
+// first so the screen can prepend them. Trashed chats stay readable — the
+// trash shows what it holds.
+func (r *AIConversationRepository) ListTurnsPage(restaurantID, ownerUserID uint, conversationID string, beforeSequence uint64, limit int) ([]entity.AIConversationTurn, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("AI conversation repository is not connected")
+	}
+	id, err := normalizeExistingOpaqueID(conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return nil, errors.New("AI conversation restaurant and owner are required")
+	}
+	if limit <= 0 {
+		limit = defaultConversationPageLimit
+	}
+	if limit > maxConversationPageLimit {
+		limit = maxConversationPageLimit
+	}
+	query := r.db.Model(&entity.AIConversationTurn{}).
+		Joins("JOIN ai_conversations AS conversation_scope ON conversation_scope.id = ai_conversation_turns.conversation_id").
+		Where("conversation_scope.id = ? AND conversation_scope.restaurant_id = ? AND conversation_scope.owner_user_id = ?", id, restaurantID, ownerUserID)
+	if beforeSequence > 0 {
+		query = query.Where("ai_conversation_turns.sequence < ?", beforeSequence)
+	}
+	var turns []entity.AIConversationTurn
+	if err := query.Order("ai_conversation_turns.sequence DESC").Limit(limit).Find(&turns).Error; err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(turns)-1; left < right; left, right = left+1, right-1 {
+		turns[left], turns[right] = turns[right], turns[left]
+	}
+	return turns, nil
+}
+
+// normalizeConversationTitle is the one rule for a title: one line, whitespace
+// collapsed, at most AIConversationTitleMaxRunes.
+func normalizeConversationTitle(raw string) string {
+	title := strings.Join(strings.Fields(raw), " ")
+	if runes := []rune(title); len(runes) > AIConversationTitleMaxRunes {
+		title = string(runes[:AIConversationTitleMaxRunes])
+	}
+	return title
+}
+
+// RenameConversation stores the owner's own title. updated_at is left alone:
+// renaming is not activity, and must not move the chat to the top of the list.
+func (r *AIConversationRepository) RenameConversation(restaurantID, ownerUserID uint, conversationID, title string) error {
+	if r == nil || r.db == nil {
+		return errors.New("AI conversation repository is not connected")
+	}
+	id, err := normalizeExistingOpaqueID(conversationID)
+	if err != nil {
+		return err
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return errors.New("AI conversation restaurant and owner are required")
+	}
+	title = normalizeConversationTitle(title)
+	if title == "" {
+		return errors.New("AI conversation title is required")
+	}
+	result := r.db.Model(&entity.AIConversation{}).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ?", id, restaurantID, ownerUserID).
+		UpdateColumns(map[string]interface{}{"title": title, "title_by_owner": true})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// AutoTitleConversation sets the title Go derived from the first question —
+// only where no title exists yet and the owner has not chosen one. Safe to
+// call on every turn; it writes once.
+func (r *AIConversationRepository) AutoTitleConversation(restaurantID, ownerUserID uint, conversationID, title string) error {
+	if r == nil || r.db == nil {
+		return errors.New("AI conversation repository is not connected")
+	}
+	id, err := normalizeExistingOpaqueID(conversationID)
+	if err != nil {
+		return err
+	}
+	title = normalizeConversationTitle(title)
+	if title == "" {
+		return nil
+	}
+	return r.db.Model(&entity.AIConversation{}).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND title = '' AND title_by_owner = false", id, restaurantID, ownerUserID).
+		UpdateColumn("title", title).Error
+}
+
+// TrashConversation moves a chat to the trash; RestoreConversation brings it
+// back. Neither touches updated_at, so a restored chat returns to where it was.
+func (r *AIConversationRepository) TrashConversation(restaurantID, ownerUserID uint, conversationID string) error {
+	return r.setTrashed(restaurantID, ownerUserID, conversationID, true)
+}
+
+func (r *AIConversationRepository) RestoreConversation(restaurantID, ownerUserID uint, conversationID string) error {
+	return r.setTrashed(restaurantID, ownerUserID, conversationID, false)
+}
+
+func (r *AIConversationRepository) setTrashed(restaurantID, ownerUserID uint, conversationID string, trashed bool) error {
+	if r == nil || r.db == nil {
+		return errors.New("AI conversation repository is not connected")
+	}
+	id, err := normalizeExistingOpaqueID(conversationID)
+	if err != nil {
+		return err
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return errors.New("AI conversation restaurant and owner are required")
+	}
+	var value interface{}
+	filter := "trashed_at IS NULL"
+	if trashed {
+		value = r.currentTime()
+	} else {
+		value = nil
+		filter = "trashed_at IS NOT NULL"
+	}
+	result := r.db.Model(&entity.AIConversation{}).
+		Where("id = ? AND restaurant_id = ? AND owner_user_id = ? AND "+filter, id, restaurantID, ownerUserID).
+		UpdateColumn("trashed_at", value)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// TrashAllConversations is "ล้างประวัติแชททั้งหมด": every live chat goes to the
+// trash, where it can still be brought back for seven days.
+func (r *AIConversationRepository) TrashAllConversations(restaurantID, ownerUserID uint) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("AI conversation repository is not connected")
 	}
 	if restaurantID == 0 || ownerUserID == 0 {
 		return 0, errors.New("AI conversation restaurant and owner are required")
 	}
-	result := r.db.Where("restaurant_id = ? AND owner_user_id = ?", restaurantID, ownerUserID).
+	result := r.db.Model(&entity.AIConversation{}).
+		Where("restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NULL", restaurantID, ownerUserID).
+		UpdateColumn("trashed_at", r.currentTime())
+	return result.RowsAffected, result.Error
+}
+
+// PurgeAllTrashed empties the owner's trash for good.
+func (r *AIConversationRepository) PurgeAllTrashed(restaurantID, ownerUserID uint) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("AI conversation repository is not connected")
+	}
+	if restaurantID == 0 || ownerUserID == 0 {
+		return 0, errors.New("AI conversation restaurant and owner are required")
+	}
+	result := r.db.Where("restaurant_id = ? AND owner_user_id = ? AND trashed_at IS NOT NULL", restaurantID, ownerUserID).
 		Delete(&entity.AIConversation{})
 	return result.RowsAffected, result.Error
 }
