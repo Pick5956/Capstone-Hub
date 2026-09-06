@@ -58,6 +58,10 @@ const TOOL_TOPICS: Record<string, Topic[]> = {
   get_shop_profile: [],
   get_table_status: [],
   get_active_orders: [],
+  // One bill. Asked "โต๊ะ F01 สั่งอะไรไป" this fell through to reading the prose,
+  // matched "ยอด" inside "ยอดสุทธิ", and offered "เทียบสัปดาห์ก่อน" under a list of
+  // four dishes — a week of sales does not follow from one table's bill.
+  get_order_detail: [],
   get_data_coverage: [],
   search_system_docs: [],
 };

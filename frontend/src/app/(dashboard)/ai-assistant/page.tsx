@@ -821,6 +821,7 @@ export default function AIAssistantPage() {
                   <AIFollowUpList
                     items={msg.actions}
                     messageId={msg.id}
+                    language={language}
                     onSelect={(action) => handleGuidedAction(action, msg.id)}
                     className="-mt-3"
                   />

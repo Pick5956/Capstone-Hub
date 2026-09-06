@@ -1049,6 +1049,7 @@ export default function AIOperationsFloatingChat() {
                   <AIFollowUpList
                     items={msg.actions}
                     messageId={msg.id}
+                    language={language}
                     onSelect={handleAction}
                     className="-mt-3"
                   />
