@@ -855,7 +855,11 @@ export default function AIAssistantPage() {
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             language={language}
-            onConversationsCleared={resetConversation}
+            onConversationsCleared={() => {
+              // Every chat just went to the trash, this one included.
+              setActiveThread(storageKey, null);
+              resetConversation();
+            }}
           />
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}

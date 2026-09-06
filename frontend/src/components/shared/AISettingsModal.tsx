@@ -2,18 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Check, ChevronLeft, ChevronRight, Loader2, Settings2, SlidersHorizontal, Trash2, Wand2, X } from "lucide-react";
+import { Bell, Check, ChevronLeft, ChevronRight, Loader2, RotateCcw, Settings2, SlidersHorizontal, Trash2, Wand2, X } from "lucide-react";
 import {
   AI_ACTION_TYPES,
   deleteAllAIConversations,
   getAISettings,
+  listAIConversations,
+  purgeAIConversation,
+  purgeAllTrashedAIConversations,
+  restoreAIConversation,
   updateAISettings,
   type AIActionType,
   type AIInsightKind,
   type AISettingsPatch,
   type AISettingsView,
 } from "@/src/lib/ai";
+import type { AIConversationSummary } from "@/src/types/ai";
 import { cacheOwnerTitle, useFollowUpsSetting } from "@/src/lib/aiPrefs";
+import { notifyConversationsChanged } from "@/src/lib/aiThreads";
 
 // The assistant's settings, in sections.
 //
@@ -72,13 +78,26 @@ function copy(language: "th" | "en") {
         followUps: "คำถามแนะนำใต้คำตอบ",
         followUpsHint: "เสนอคำถามต่อยอด 2–3 ข้อหลังแต่ละคำตอบ (เฉพาะเครื่องนี้)",
         groupHistory: "ประวัติแชท",
-        memoryNote: "ผู้ช่วยจำเรื่องที่คุยไว้ 7 วันนับจากข้อความล่าสุด กด “เริ่มแชทใหม่” เมื่อไหร่ก็ลืมเส้นนั้น",
-        clearAll: "ล้างประวัติแชททั้งหมด",
-        clearAllHint: "ลบทุกบทสนทนาและสิ่งที่ผู้ช่วยจำไว้ ย้อนกลับไม่ได้",
-        clearButton: "ล้างประวัติ…",
-        clearConfirm: "ลบทั้งหมดเลย",
-        clearCancel: "ไม่ลบ",
-        cleared: "ลบแล้ว",
+        memoryNote: "แชทเก็บไว้จนกว่าคุณจะลบ ผู้ช่วยจำเรื่องที่คุยในแต่ละแชทแยกกัน · ที่ลบไปอยู่ในถังขยะ 7 วันก่อนหายถาวร",
+        clearAll: "ย้ายทุกแชทลงถังขยะ",
+        clearAllHint: "รายการแชทจะว่าง กู้คืนทีละแชทได้จากถังขยะภายใน 7 วัน",
+        clearButton: "ล้างรายการ…",
+        clearConfirm: "ย้ายทั้งหมดลงถังขยะ",
+        clearCancel: "ไม่ย้าย",
+        cleared: "ย้ายแล้ว",
+        trash: "ถังขยะ",
+        trashHint: "แชทที่ลบไว้ กู้คืนได้ภายใน 7 วัน หลังจากนั้นระบบลบถาวรให้เอง",
+        trashOpen: "ดูถังขยะ",
+        trashClose: "ซ่อนถังขยะ",
+        trashEmpty: "ถังขยะว่าง",
+        trashLoadError: "โหลดถังขยะไม่สำเร็จ",
+        restore: "กู้คืน",
+        purge: "ลบถาวร",
+        purgeAll: "ลบถาวรทั้งหมด",
+        purgeAllConfirm: "ลบถาวรทุกแชทในถังขยะ",
+        purgeAllCancel: "ยังก่อน",
+        purgeIn: (days: number) => (days <= 0 ? "จะถูกลบถาวรวันนี้" : `จะถูกลบถาวรในอีก ${days} วัน`),
+        untitled: "แชทไม่มีชื่อ",
         master: "ให้ผู้ช่วยแก้ข้อมูลร้านได้",
         masterHint: "ปิดสวิตช์นี้ = ผู้ช่วยดูข้อมูลได้อย่างเดียว รายการข้างล่างจะไม่มีผล",
         unavailable: "ตอนนี้ความสามารถนี้ถูกปิดจากระบบส่วนกลาง เปิดสวิตช์ไว้ได้ แต่จะยังไม่มีผลจนกว่าระบบจะเปิดให้",
@@ -111,13 +130,26 @@ function copy(language: "th" | "en") {
         followUps: "Follow-up suggestions under answers",
         followUpsHint: "Offer 2–3 next questions after each answer (this device only)",
         groupHistory: "Chat history",
-        memoryNote: "The assistant remembers a thread for 7 days after its last message. “New chat” forgets that thread.",
-        clearAll: "Clear all chat history",
-        clearAllHint: "Deletes every conversation and everything the assistant remembers. Cannot be undone.",
-        clearButton: "Clear…",
-        clearConfirm: "Delete everything",
+        memoryNote: "Chats are kept until you delete them; the assistant remembers each chat on its own. Deleted chats wait in the trash for 7 days.",
+        clearAll: "Move every chat to the trash",
+        clearAllHint: "The chat list empties. Each chat can be restored from the trash within 7 days.",
+        clearButton: "Clear list…",
+        clearConfirm: "Move all to trash",
         clearCancel: "Keep",
-        cleared: "Deleted",
+        cleared: "Moved",
+        trash: "Trash",
+        trashHint: "Deleted chats can be restored within 7 days; after that they are removed for good.",
+        trashOpen: "Show trash",
+        trashClose: "Hide trash",
+        trashEmpty: "The trash is empty",
+        trashLoadError: "Could not load the trash",
+        restore: "Restore",
+        purge: "Delete now",
+        purgeAll: "Delete all now",
+        purgeAllConfirm: "Delete every chat in the trash",
+        purgeAllCancel: "Not yet",
+        purgeIn: (days: number) => (days <= 0 ? "removed for good today" : `removed for good in ${days} day${days === 1 ? "" : "s"}`),
+        untitled: "Untitled chat",
         master: "Let the assistant change shop data",
         masterHint: "Off = the assistant only reads. Nothing below applies.",
         unavailable: "This capability is currently off system-wide. You can leave the switch on, but it takes effect only once the system enables it.",
@@ -212,6 +244,12 @@ export default function AISettingsModal({
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearedCount, setClearedCount] = useState<number | null>(null);
+  // The trash: read when opened, kept in step with every restore or purge.
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trash, setTrash] = useState<AIConversationSummary[] | null>(null);
+  const [trashError, setTrashError] = useState("");
+  const [trashBusyId, setTrashBusyId] = useState<string | null>(null);
+  const [confirmPurgeAll, setConfirmPurgeAll] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -220,6 +258,10 @@ export default function AISettingsModal({
     setConfirmClear(false);
     setClearedCount(null);
     setMobileOpen(false);
+    setTrashOpen(false);
+    setTrash(null);
+    setTrashError("");
+    setConfirmPurgeAll(false);
     getAISettings()
       .then((res) => {
         setView(res.data);
@@ -267,18 +309,81 @@ export default function AISettingsModal({
     void apply({ owner_title: next }, (v) => ({ ...v, owner_title: next || t.titlePlaceholder }));
   };
 
+  const loadTrash = async () => {
+    try {
+      const res = await listAIConversations(true);
+      setTrash(res.data.conversations ?? []);
+      setTrashError("");
+    } catch {
+      setTrash((current) => current ?? []);
+      setTrashError(t.trashLoadError);
+    }
+  };
+
+  const openTrash = () => {
+    setTrashOpen((open) => !open);
+    if (trash === null) void loadTrash();
+  };
+
   const clearAll = async () => {
     setClearing(true);
     try {
       const res = await deleteAllAIConversations();
       setClearedCount(res.data.deleted);
       setConfirmClear(false);
+      notifyConversationsChanged();
+      if (trashOpen) void loadTrash();
       onConversationsCleared?.();
     } catch {
       setSaveState("error");
     } finally {
       setClearing(false);
     }
+  };
+
+  const restoreOne = async (conversation: AIConversationSummary) => {
+    setTrashBusyId(conversation.id);
+    try {
+      await restoreAIConversation(conversation.id);
+      setTrash((current) => (current ?? []).filter((item) => item.id !== conversation.id));
+      notifyConversationsChanged();
+    } catch {
+      setTrashError(t.trashLoadError);
+    } finally {
+      setTrashBusyId(null);
+    }
+  };
+
+  const purgeOne = async (conversation: AIConversationSummary) => {
+    setTrashBusyId(conversation.id);
+    try {
+      await purgeAIConversation(conversation.id);
+      setTrash((current) => (current ?? []).filter((item) => item.id !== conversation.id));
+    } catch {
+      setTrashError(t.trashLoadError);
+    } finally {
+      setTrashBusyId(null);
+    }
+  };
+
+  const purgeAll = async () => {
+    setTrashBusyId("*");
+    try {
+      await purgeAllTrashedAIConversations();
+      setTrash([]);
+      setConfirmPurgeAll(false);
+    } catch {
+      setTrashError(t.trashLoadError);
+    } finally {
+      setTrashBusyId(null);
+    }
+  };
+
+  // Days left before the sweep removes a trashed chat for good.
+  const daysUntilPurge = (trashedAt?: string | null) => {
+    if (!trashedAt) return 7;
+    const elapsed = (Date.now() - new Date(trashedAt).getTime()) / (24 * 60 * 60 * 1000);
+    return Math.max(0, Math.ceil(7 - elapsed));
   };
 
   const actionsOn = Boolean(view?.actions_enabled);
@@ -345,7 +450,95 @@ export default function AISettingsModal({
                 </button>
               )}
             </Row>
+            <Row label={t.trash} hint={t.trashHint}>
+              <button
+                type="button"
+                onClick={openTrash}
+                className="h-8 shrink-0 rounded-lg border border-gray-200 bg-white px-3 text-[12.5px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                {trashOpen ? t.trashClose : t.trashOpen}
+                {trash && trash.length > 0 ? ` (${trash.length})` : ""}
+              </button>
+            </Row>
           </Group>
+          {trashOpen && (
+            <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+              {trash === null ? (
+                <p className="px-4 py-5 text-center text-[12px] text-gray-400">…</p>
+              ) : trash.length === 0 ? (
+                <p className="px-4 py-5 text-center text-[12px] text-gray-500 dark:text-gray-400">{t.trashEmpty}</p>
+              ) : (
+                <>
+                  {trash.map((conversation) => (
+                    <div
+                      key={conversation.id}
+                      className="flex items-center justify-between gap-3 border-t border-gray-100 px-3 py-2.5 first:border-t-0 dark:border-gray-800"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-gray-800 dark:text-gray-100">{conversation.title || t.untitled}</p>
+                        <p className="mt-0.5 text-[11.5px] text-gray-500 dark:text-gray-400">{t.purgeIn(daysUntilPurge(conversation.trashed_at))}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => void restoreOne(conversation)}
+                          disabled={trashBusyId !== null}
+                          aria-label={t.restore}
+                          title={t.restore}
+                          className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-50 dark:text-orange-300 dark:hover:bg-orange-950/30"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> {t.restore}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void purgeOne(conversation)}
+                          disabled={trashBusyId !== null}
+                          aria-label={t.purge}
+                          title={t.purge}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/30"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-end gap-1.5 border-t border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/60">
+                    {confirmPurgeAll ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmPurgeAll(false)}
+                          disabled={trashBusyId !== null}
+                          className="h-8 rounded-lg px-3 text-[12.5px] font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          {t.purgeAllCancel}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void purgeAll()}
+                          disabled={trashBusyId !== null}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-red-600 px-3 text-[12.5px] font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {trashBusyId === "*" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          {t.purgeAllConfirm}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmPurgeAll(true)}
+                        disabled={trashBusyId !== null}
+                        className="h-8 rounded-lg border border-red-200 bg-white px-3 text-[12.5px] font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                      >
+                        {t.purgeAll}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+              {trashError && <p className="px-3 py-2 text-[11px] text-red-500">{trashError}</p>}
+            </div>
+          )}
           <Note>{t.memoryNote}</Note>
         </>
       );
