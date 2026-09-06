@@ -6,6 +6,8 @@ import type {
   AIAskResponse,
   AIActionPlanConfirmation,
   AIConversationMessage,
+  AIConversationSummary,
+  AIConversationTurn,
   AIInsight,
   AIReceiptDraft,
   AISnapshot,
@@ -48,8 +50,38 @@ export const askOperationsAI = (
   return apiClient.post<AIAskResponse>("/api/v1/ai/operations/ask", request);
 };
 
+// The chat list. Deleting moves a chat to the trash, where it can be restored
+// for seven days; "purge" is the trash's own, permanent, delete.
+const conversationPath = (conversationId: string) =>
+  `/api/v1/ai/operations/conversations/${encodeURIComponent(conversationId)}`;
+
+export const listAIConversations = (trashed = false, limit = 0) =>
+  apiClient.get<{ conversations: AIConversationSummary[] }>("/api/v1/ai/operations/conversations", {
+    params: { ...(trashed ? { trashed: 1 } : {}), ...(limit > 0 ? { limit } : {}) },
+  });
+
+export const getAIConversationTurns = (conversationId: string, beforeSequence = 0, limit = 0) =>
+  apiClient.get<{ turns: AIConversationTurn[] }>(`${conversationPath(conversationId)}/turns`, {
+    params: { ...(beforeSequence > 0 ? { before: beforeSequence } : {}), ...(limit > 0 ? { limit } : {}) },
+  });
+
+export const renameAIConversation = (conversationId: string, title: string) =>
+  apiClient.patch<void>(conversationPath(conversationId), { title });
+
+/** Move one chat to the trash. */
 export const deleteAIConversation = (conversationId: string) =>
-  apiClient.delete<void>(`/api/v1/ai/operations/conversations/${encodeURIComponent(conversationId)}`);
+  apiClient.delete<void>(conversationPath(conversationId));
+
+export const restoreAIConversation = (conversationId: string) =>
+  apiClient.post<void>(`${conversationPath(conversationId)}/restore`);
+
+/** Delete one chat for good — from the trash only. */
+export const purgeAIConversation = (conversationId: string) =>
+  apiClient.delete<void>(`${conversationPath(conversationId)}/permanent`);
+
+/** Empty the trash for good. */
+export const purgeAllTrashedAIConversations = () =>
+  apiClient.post<{ deleted: number }>("/api/v1/ai/operations/conversations/purge");
 
 export const confirmAIAction = (previewId: string, confirmationToken: string) =>
   apiClient.post<AIActionConfirmation>(

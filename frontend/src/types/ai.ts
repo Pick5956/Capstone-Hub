@@ -158,6 +158,31 @@ export type AIActionConfirmation = {
   };
 };
 
+// One row of the chat list. turn_count is the number of exchanges; trashed_at
+// is set only on rows read from the trash.
+export type AIConversationSummary = {
+  id: string;
+  title: string;
+  title_by_owner: boolean;
+  turn_count: number;
+  created_at: string;
+  updated_at: string;
+  trashed_at?: string | null;
+};
+
+// One stored exchange, read back to reopen a chat. display carries what the
+// answer needed on screen (chart, forecast, tools) exactly as the server kept it.
+export type AIConversationTurn = {
+  id: string;
+  sequence: number;
+  question: string;
+  answer: string;
+  tool?: string;
+  latency_ms: number;
+  created_at: string;
+  display: Record<string, unknown>;
+};
+
 export type AISystemDocSource = {
   article_slug: string;
   section_id: string;
