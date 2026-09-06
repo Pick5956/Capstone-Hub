@@ -749,7 +749,7 @@ export default function AIAssistantPage() {
     : null;
 
   return (
-    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh_-_var(--shell-pad)_*_2)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh_-_var(--shell-pad)_*_2)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-gray-900">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
@@ -767,7 +767,7 @@ export default function AIAssistantPage() {
           />
         )}
         {/* Conversation — full width */}
-        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-900">
+        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
             {/* Insights live behind a bell, the control everyone already reads as
@@ -792,11 +792,11 @@ export default function AIAssistantPage() {
                     ? `ควรรู้วันนี้${insightsCount > 0 ? ` ${insightsCount} เรื่อง` : ""}`
                     : `Insights${insightsCount > 0 ? `, ${insightsCount} items` : ""}`
                 }
-                className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
+                className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
               >
                 <Bell className="h-3.5 w-3.5" />
                 {insightsCount > 0 && (
-                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#faf8f2] dark:ring-gray-950">
+                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#faf8f2] dark:ring-gray-900">
                     {insightsCount}
                   </span>
                 )}

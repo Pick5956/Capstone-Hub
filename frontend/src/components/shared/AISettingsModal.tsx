@@ -184,7 +184,7 @@ function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (nex
 
 function Row({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-1 py-3 first:border-t-0 dark:border-gray-800">
+    <div className="flex items-center justify-between gap-4 border-t border-gray-100 py-3 first:border-t-0 dark:border-gray-800">
       <div className="min-w-0">
         <p className="text-[13px] font-medium leading-[18px] text-gray-800 dark:text-gray-100">{label}</p>
         {hint ? <p className="mt-0.5 text-[11.5px] leading-4 text-gray-500 dark:text-gray-400">{hint}</p> : null}
@@ -197,7 +197,7 @@ function Row({ label, hint, children }: { label: string; hint?: React.ReactNode;
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500">{title}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500">{title}</p>
       <div className="flex flex-col">{children}</div>
     </div>
   );
