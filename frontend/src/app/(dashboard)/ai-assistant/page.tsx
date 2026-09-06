@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, MessageSquareText, Minimize2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
+import { ArrowUp, BarChart3, Bot, ChevronDown, Loader2, Maximize2, MessageSquareText, Minimize2, Send, Settings, Square, SquarePen, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage, getAISettings } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -818,7 +818,7 @@ export default function AIAssistantPage() {
                 }
                 className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
               >
-                <Bell className="h-3.5 w-3.5" />
+                <BarChart3 className="h-3.5 w-3.5" />
                 {insightsCount > 0 && (
                   <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#faf8f2] dark:ring-gray-950">
                     {insightsCount}
@@ -834,7 +834,7 @@ export default function AIAssistantPage() {
                 aria-label={copy.newChat}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <SquarePen className="h-3.5 w-3.5" />
               </button>
             </HoverTip>
             <HoverTip

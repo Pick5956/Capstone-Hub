@@ -11,7 +11,7 @@ import {
   Wallet,
   X,
   BarChart2,
-  RotateCcw,
+  SquarePen,
   MessageSquareText,
   ChevronDown,
   Maximize2,
@@ -1016,7 +1016,7 @@ export default function AIOperationsFloatingChat() {
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <SquarePen className="h-3.5 w-3.5" />
               </button>
             )}
             <button
