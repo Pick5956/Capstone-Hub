@@ -28,6 +28,11 @@ const (
 
 var ErrAIConversationPersistence = errors.New("AI conversation could not be saved")
 
+// ErrAIConversationGone is a conversation id the owner sent that no longer
+// answers: trashed, purged, never theirs. The screen starts a fresh chat on it
+// rather than showing an error — the controller maps it to its own code.
+var ErrAIConversationGone = errors.New("AI conversation is gone")
+
 // AIConversationStore keeps the orchestration layer independent from GORM and
 // makes memory behavior testable without a database.
 type AIConversationStore interface {
@@ -118,7 +123,7 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 	} else {
 		conversation, err = s.conversationStore.FindActiveConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("AI conversation was not found, expired, or belongs to another owner: %w", err)
+			return nil, nil, fmt.Errorf("%w: %v", ErrAIConversationGone, err)
 		}
 	}
 
@@ -266,6 +271,11 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		return fmt.Errorf("encode conversation context delta: %w", err)
 	}
 
+	displayJSON, err := json.Marshal(aiTurnDisplayFor(response))
+	if err != nil {
+		return fmt.Errorf("encode conversation display: %w", err)
+	}
+
 	turn := &entity.AIConversationTurn{
 		Question:             question,
 		Answer:               response.Answer,
@@ -274,6 +284,7 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		ResolvedPlanJSON:     string(planJSON),
 		ContextDeltaJSON:     string(contextDeltaJSON),
 		ResultEntityRefsJSON: string(entityRefsJSON),
+		DisplayJSON:          string(displayJSON),
 		LatencyMS:            elapsed.Milliseconds(),
 	}
 	if err := s.conversationStore.AppendTurn(
@@ -293,8 +304,159 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 	// digest came to be composed correctly and thrown away on every turn.
 	session.conversation.Version++
 	session.conversation.NextTurnSequence = turn.Sequence + 1
+	// The first turn names the chat. Go cuts the question short; the owner can
+	// rename it, after which this never writes again.
+	if turn.Sequence == 1 {
+		if err := s.conversationStore.AutoTitleConversation(actor.RestaurantID, actor.OwnerUserID, session.conversation.ID, aiConversationTitleFromQuestion(question)); err != nil {
+			aiStage("warn", "conversation title could not be stored: %v", err)
+		}
+	}
 	s.maybeSummarizeConversation(actor, session, turn.Sequence)
 	return nil
+}
+
+// aiConversationTitleMaxRunes is how much of the opening question becomes the
+// chat's name: enough to tell "ยอดขายสัปดาห์นี้" from "ยอดขายเดือนนี้", short
+// enough for one line of the list.
+const aiConversationTitleMaxRunes = 40
+
+// aiConversationTitleFromQuestion is the automatic title: the question on one
+// line, cut at aiConversationTitleMaxRunes with an ellipsis. Plain Go — a
+// model call to invent a title would cost a request per chat for a name the
+// owner can already read off the question.
+func aiConversationTitleFromQuestion(question string) string {
+	title := strings.Join(strings.Fields(question), " ")
+	runes := []rune(title)
+	if len(runes) <= aiConversationTitleMaxRunes {
+		return title
+	}
+	return string(runes[:aiConversationTitleMaxRunes]) + "…"
+}
+
+// aiTurnDisplay is what a turn keeps so the screen can show the answer again
+// exactly as it first appeared: the chart or forecast beside it, the tools
+// that produced it, the manual pages it cited. Never the snapshot — the
+// repository refuses a key that even contains the word.
+type aiTurnDisplay struct {
+	Chart        *AIChartData        `json:"chart,omitempty"`
+	Forecast     *AIForecastResult   `json:"forecast,omitempty"`
+	ToolsUsed    []AIToolName        `json:"tools_used,omitempty"`
+	ScopeAssumed bool                `json:"scope_assumed,omitempty"`
+	DocSources   []AISystemDocSource `json:"doc_sources,omitempty"`
+	ActionPlanID string              `json:"action_plan_id,omitempty"`
+	Model        string              `json:"model,omitempty"`
+}
+
+func aiTurnDisplayFor(response *AIAskResponse) aiTurnDisplay {
+	display := aiTurnDisplay{
+		Chart:        response.Chart,
+		Forecast:     response.Forecast,
+		ToolsUsed:    response.ToolsUsed,
+		ScopeAssumed: response.ScopeAssumed,
+		DocSources:   response.DocSources,
+		Model:        response.Model,
+	}
+	if response.ActionPlan != nil {
+		display.ActionPlanID = response.ActionPlan.ID
+	}
+	return display
+}
+
+// AIConversationTurnView is one turn as the screen reads it back: the
+// exchange, and the display data to redraw it.
+type AIConversationTurnView struct {
+	ID        string          `json:"id"`
+	Sequence  uint64          `json:"sequence"`
+	Question  string          `json:"question"`
+	Answer    string          `json:"answer"`
+	Tool      string          `json:"tool,omitempty"`
+	LatencyMS int64           `json:"latency_ms"`
+	CreatedAt time.Time       `json:"created_at"`
+	Display   json.RawMessage `json:"display"`
+}
+
+func (s *AIService) requireConversationOwner(actor AIActorContext) error {
+	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
+		return errors.New("authenticated restaurant owner context is required")
+	}
+	if s.conversationStore == nil {
+		return errors.New("AI conversation memory is not configured")
+	}
+	return nil
+}
+
+// ListConversationsForOwner is the chat list — or the trash, when asked.
+func (s *AIService) ListConversationsForOwner(actor AIActorContext, trashed bool, limit int) ([]repository.AIConversationSummary, error) {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return nil, err
+	}
+	rows, err := s.conversationStore.ListConversations(actor.RestaurantID, actor.OwnerUserID, trashed, limit)
+	if err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []repository.AIConversationSummary{}
+	}
+	return rows, nil
+}
+
+// ConversationTurnsForOwner reads one page of a chat, oldest first, ending
+// just before beforeSequence (0 = the newest page).
+func (s *AIService) ConversationTurnsForOwner(actor AIActorContext, conversationID string, beforeSequence uint64, limit int) ([]AIConversationTurnView, error) {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return nil, err
+	}
+	turns, err := s.conversationStore.ListTurnsPage(actor.RestaurantID, actor.OwnerUserID, conversationID, beforeSequence, limit)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]AIConversationTurnView, 0, len(turns))
+	for _, turn := range turns {
+		display := json.RawMessage(strings.TrimSpace(turn.DisplayJSON))
+		if len(display) == 0 || !json.Valid(display) {
+			display = json.RawMessage(`{}`)
+		}
+		views = append(views, AIConversationTurnView{
+			ID:        turn.ID,
+			Sequence:  turn.Sequence,
+			Question:  turn.Question,
+			Answer:    turn.Answer,
+			Tool:      turn.Tool,
+			LatencyMS: turn.LatencyMS,
+			CreatedAt: turn.CreatedAt,
+			Display:   display,
+		})
+	}
+	return views, nil
+}
+
+func (s *AIService) RenameConversationForOwner(actor AIActorContext, conversationID, title string) error {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return err
+	}
+	return s.conversationStore.RenameConversation(actor.RestaurantID, actor.OwnerUserID, conversationID, title)
+}
+
+func (s *AIService) RestoreConversationForOwner(actor AIActorContext, conversationID string) error {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return err
+	}
+	return s.conversationStore.RestoreConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
+}
+
+// PurgeConversationForOwner deletes a chat for good — the trash's own button.
+func (s *AIService) PurgeConversationForOwner(actor AIActorContext, conversationID string) error {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return err
+	}
+	return s.conversationStore.DeleteConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
+}
+
+func (s *AIService) PurgeAllTrashedForOwner(actor AIActorContext) (int64, error) {
+	if err := s.requireConversationOwner(actor); err != nil {
+		return 0, err
+	}
+	return s.conversationStore.PurgeAllTrashed(actor.RestaurantID, actor.OwnerUserID)
 }
 
 // maybeSummarizeConversation writes the model's memory of the older part of this

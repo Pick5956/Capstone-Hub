@@ -81,6 +81,30 @@ func (f *fakeAIOperationsService) AIActionsSettingForOwner(uint) (service.AIActi
 	return service.AIActionsSettingView{}, f.askErr
 }
 
+func (f *fakeAIOperationsService) ListConversationsForOwner(service.AIActorContext, bool, int) ([]repository.AIConversationSummary, error) {
+	return nil, nil
+}
+
+func (f *fakeAIOperationsService) ConversationTurnsForOwner(service.AIActorContext, string, uint64, int) ([]service.AIConversationTurnView, error) {
+	return nil, nil
+}
+
+func (f *fakeAIOperationsService) RenameConversationForOwner(service.AIActorContext, string, string) error {
+	return nil
+}
+
+func (f *fakeAIOperationsService) RestoreConversationForOwner(service.AIActorContext, string) error {
+	return nil
+}
+
+func (f *fakeAIOperationsService) PurgeConversationForOwner(service.AIActorContext, string) error {
+	return nil
+}
+
+func (f *fakeAIOperationsService) PurgeAllTrashedForOwner(service.AIActorContext) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeAIOperationsService) ApplyAISettingsPatchForOwner(uint, service.AISettingsPatch) error {
 	return nil
 }

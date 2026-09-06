@@ -25,6 +25,12 @@ type AIOperationsService interface {
 	AskOperationsForOwner(ctx context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error)
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
+	ListConversationsForOwner(actor service.AIActorContext, trashed bool, limit int) ([]repository.AIConversationSummary, error)
+	ConversationTurnsForOwner(actor service.AIActorContext, conversationID string, beforeSequence uint64, limit int) ([]service.AIConversationTurnView, error)
+	RenameConversationForOwner(actor service.AIActorContext, conversationID, title string) error
+	RestoreConversationForOwner(actor service.AIActorContext, conversationID string) error
+	PurgeConversationForOwner(actor service.AIActorContext, conversationID string) error
+	PurgeAllTrashedForOwner(actor service.AIActorContext) (int64, error)
 	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
 	ProactiveInsightsForOwner(actor service.AIActorContext) ([]service.AIInsight, error)
 	ExtractReceiptForOwner(actor service.AIActorContext, imageBase64, mimeType string) (*service.ReceiptDraft, error)
@@ -114,6 +120,12 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		}
 		if errors.Is(err, repository.ErrAIConversationConflict) {
 			respondAPIError(c, http.StatusConflict, err)
+			return
+		}
+		// A chat that was trashed or purged under the screen: its own code, so
+		// the screen opens a fresh chat instead of showing a failure.
+		if errors.Is(err, service.ErrAIConversationGone) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "conversation is gone", "code": "conversation_gone"})
 			return
 		}
 		if errors.Is(err, service.ErrAIConversationPersistence) {
@@ -518,8 +530,145 @@ func decodeAIActionConfirmationRequest(c *gin.Context, request *service.AIAction
 	return nil
 }
 
+// conversationActor is the owner context every chat-list handler needs, or
+// nothing when the request is not an authenticated owner's.
+func conversationActor(c *gin.Context) (service.AIActorContext, bool) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return service.AIActorContext{}, false
+	}
+	if !requireAIOwner(c) {
+		return service.AIActorContext{}, false
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return service.AIActorContext{}, false
+	}
+	return service.AIActorContext{RestaurantID: restaurantID, OwnerUserID: userID, Role: "owner"}, true
+}
+
+func conversationIDParam(c *gin.Context) (string, bool) {
+	conversationID := strings.TrimSpace(c.Param("conversationID"))
+	if conversationID == "" || len(conversationID) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		return "", false
+	}
+	return conversationID, true
+}
+
+// ListConversations is the chat list (?trashed=1 for the trash).
+func (ctrl *AIController) ListConversations(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	trashed := c.Query("trashed") == "1" || strings.EqualFold(c.Query("trashed"), "true")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	rows, err := ctrl.svc.ListConversationsForOwner(actor, trashed, limit)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"conversations": rows})
+}
+
+// ConversationTurns is one page of a chat's transcript (?before=<sequence>).
+func (ctrl *AIController) ConversationTurns(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	conversationID, ok := conversationIDParam(c)
+	if !ok {
+		return
+	}
+	before, _ := strconv.ParseUint(c.DefaultQuery("before", "0"), 10, 64)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
+	turns, err := ctrl.svc.ConversationTurnsForOwner(actor, conversationID, before, limit)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"turns": turns})
+}
+
+// RenameConversation stores the owner's title for a chat.
+func (ctrl *AIController) RenameConversation(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	conversationID, ok := conversationIDParam(c)
+	if !ok {
+		return
+	}
+	var input struct {
+		Title string `json:"title" binding:"required,max=200"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	if err := ctrl.svc.RenameConversationForOwner(actor, conversationID, input.Title); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// RestoreConversation brings a chat back out of the trash.
+func (ctrl *AIController) RestoreConversation(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	conversationID, ok := conversationIDParam(c)
+	if !ok {
+		return
+	}
+	if err := ctrl.svc.RestoreConversationForOwner(actor, conversationID); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// PurgeConversation deletes one chat for good — reached from the trash only.
+func (ctrl *AIController) PurgeConversation(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	conversationID, ok := conversationIDParam(c)
+	if !ok {
+		return
+	}
+	if err := ctrl.svc.PurgeConversationForOwner(actor, conversationID); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// PurgeAllTrashed empties the trash.
+func (ctrl *AIController) PurgeAllTrashed(c *gin.Context) {
+	actor, ok := conversationActor(c)
+	if !ok {
+		return
+	}
+	deleted, err := ctrl.svc.PurgeAllTrashedForOwner(actor)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
+}
+
 // DeleteAllConversations is the settings screen's "ล้างประวัติแชททั้งหมด": every
-// conversation the owner has with this restaurant, gone in one call.
+// live chat goes to the trash, where it can still be restored for seven days.
 func (ctrl *AIController) DeleteAllConversations(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

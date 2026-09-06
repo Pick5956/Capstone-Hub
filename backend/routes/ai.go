@@ -22,6 +22,14 @@ func SetupAIRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/ai/operations/receipt", rateLimitRequests(15, time.Minute), aiCtrl.ExtractReceipt)
 	v1.POST("/ai/operations/actions/:previewID/confirm", rateLimitRequests(10, time.Minute), aiCtrl.ConfirmAction)
 	v1.DELETE("/ai/operations/actions/:previewID", rateLimitRequests(10, time.Minute), aiCtrl.CancelAction)
+	// The chat list. DELETE on a chat moves it to the trash; "permanent" and
+	// "purge" are the trash's own buttons.
+	v1.GET("/ai/operations/conversations", rateLimitRequests(60, time.Minute), aiCtrl.ListConversations)
+	v1.GET("/ai/operations/conversations/:conversationID/turns", rateLimitRequests(60, time.Minute), aiCtrl.ConversationTurns)
+	v1.PATCH("/ai/operations/conversations/:conversationID", rateLimitRequests(30, time.Minute), aiCtrl.RenameConversation)
+	v1.POST("/ai/operations/conversations/:conversationID/restore", rateLimitRequests(30, time.Minute), aiCtrl.RestoreConversation)
+	v1.DELETE("/ai/operations/conversations/:conversationID/permanent", rateLimitRequests(10, time.Minute), aiCtrl.PurgeConversation)
+	v1.POST("/ai/operations/conversations/purge", rateLimitRequests(5, time.Minute), aiCtrl.PurgeAllTrashed)
 	v1.DELETE("/ai/operations/conversations/:conversationID", rateLimitRequests(20, time.Minute), aiCtrl.DeleteConversation)
 	v1.DELETE("/ai/operations/conversations", rateLimitRequests(5, time.Minute), aiCtrl.DeleteAllConversations)
 }
