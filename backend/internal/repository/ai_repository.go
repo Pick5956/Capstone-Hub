@@ -820,3 +820,154 @@ func (r *AIRepository) menuMargins(restaurantID uint, since time.Time, orderBy s
 		Scan(&rows).Error
 	return rows, err
 }
+
+// One bill, read whole.
+//
+// Every other tool here totals or ranks: what the shop sold this month, which
+// menu earns most. None of them could answer "ขอดูบิล 20260906-015" or "โต๊ะ 5
+// เมื่อกี้สั่งอะไรไปบ้าง" — a bill was reachable only as a number inside a sum.
+// The rows below are what a person means by a bill: the lines on it, what was
+// taken off or added, and how it was paid.
+//
+// The customer's name and phone stay out, the same rule AIActiveOrder follows:
+// this leaves the system for a model provider, and neither is needed to say what
+// was ordered and what it cost.
+
+// AIBillLine is one line on a bill: the dish, how many, and what it came to.
+type AIBillLine struct {
+	MenuName  string  `json:"menu_name"`
+	Quantity  int     `json:"quantity"`
+	UnitPrice float64 `json:"unit_price"`
+	Subtotal  float64 `json:"subtotal"`
+	Status    string  `json:"status"`
+	Note      string  `json:"note"`
+}
+
+// AIBill is one bill's own row. Lines are filled in only by BillsByNumbers —
+// the recent list carries totals alone, so a question that names no bill does
+// not drag every dish of the last twenty bills to the model.
+type AIBill struct {
+	OrderNumber         string     `json:"order_number"`
+	OrderType           string     `json:"order_type"`
+	Status              string     `json:"status"`
+	PaymentStatus       string     `json:"payment_status"`
+	TableNumber         string     `json:"table_number"`
+	StaffName           string     `json:"staff_name"`
+	CustomerCount       int        `json:"customer_count"`
+	Subtotal            float64    `json:"subtotal"`
+	DiscountAmount      float64    `json:"discount_amount"`
+	ServiceChargeAmount float64    `json:"service_charge_amount"`
+	VATAmount           float64    `json:"vat_amount"`
+	GrandTotal          float64    `json:"grand_total"`
+	OpenedAt            time.Time  `json:"opened_at"`
+	CompletedAt         *time.Time `json:"completed_at"`
+	PaymentMethod       string     `json:"payment_method"`
+	CancelledReason     string     `json:"cancelled_reason"`
+	// gorm:"-" because the scan target embeds this struct: without it GORM reads
+	// the slice as a relation and refuses the query outright ("define a valid
+	// foreign key"). Lines are filled in by a second query, not by a join.
+	Lines []AIBillLine `json:"lines" gorm:"-"`
+}
+
+// aiBillSelect is the one column list both queries read, so a field can never be
+// present on a looked-up bill and missing from the same bill in the recent list.
+const aiBillSelect = `orders.id, orders.order_number, orders.order_type, orders.status,
+	orders.payment_status, COALESCE(restaurant_tables.table_number, '') AS table_number,
+	COALESCE(users.first_name, '') AS staff_name, orders.customer_count,
+	orders.subtotal, orders.discount_amount, orders.service_charge_amount, orders.vat_amount,
+	orders.grand_total, orders.opened_at, orders.completed_at,
+	COALESCE(orders.cancelled_reason, '') AS cancelled_reason,
+	COALESCE((SELECT op.method FROM order_payments op
+		WHERE op.order_id = orders.id AND op.deleted_at IS NULL
+		ORDER BY op.paid_at DESC LIMIT 1), '') AS payment_method`
+
+// aiBillRow carries the row's own id alongside the bill so the line query knows
+// which order to attach to without a second lookup by number.
+type aiBillRow struct {
+	AIBill
+	ID uint `json:"id"`
+}
+
+// RecentBills lists the shop's latest bills, newest first, without their lines.
+// It is the shortlist a question that names no bill is answered from: the model
+// reads it and says which bill it means, rather than Go deciding that "the last
+// one" is what was wanted.
+func (r *AIRepository) RecentBills(restaurantID uint, limit int) ([]AIBill, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var rows []aiBillRow
+	err := r.db.Table("orders").
+		Select(aiBillSelect).
+		Joins("LEFT JOIN restaurant_tables ON restaurant_tables.id = orders.table_id").
+		Joins("LEFT JOIN users ON users.id = orders.staff_id").
+		// A bill cannot be opened in the future, and the demo data is seeded a
+		// whole day at a time — so without this bound "บิลล่าสุด" is a bill that
+		// has not happened yet, listed at 20:15 on an afternoon.
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.opened_at <= ?", restaurantID, BangkokNow()).
+		Order("orders.opened_at desc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	bills := make([]AIBill, 0, len(rows))
+	for _, row := range rows {
+		bills = append(bills, row.AIBill)
+	}
+	return bills, nil
+}
+
+// BillsByNumbers reads the named bills in full, lines included. Numbers are
+// matched exactly: the shortlisting from a half-written number happens above
+// this, against numbers this repository already returned.
+func (r *AIRepository) BillsByNumbers(restaurantID uint, numbers []string) ([]AIBill, error) {
+	if len(numbers) == 0 {
+		return nil, nil
+	}
+	var rows []aiBillRow
+	err := r.db.Table("orders").
+		Select(aiBillSelect).
+		Joins("LEFT JOIN restaurant_tables ON restaurant_tables.id = orders.table_id").
+		Joins("LEFT JOIN users ON users.id = orders.staff_id").
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.order_number IN (?)", restaurantID, numbers).
+		Order("orders.opened_at desc").
+		Scan(&rows).Error
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+
+	ids := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	type lineRow struct {
+		AIBillLine
+		OrderID uint `json:"order_id"`
+	}
+	var lines []lineRow
+	// Cancelled lines stay in. A dish struck off the bill is part of what
+	// happened at that table, and hiding it is how "ทำไมยอดไม่ตรง" becomes
+	// unanswerable.
+	if err := r.db.Table("order_items").
+		Select(`order_items.order_id, order_items.menu_name, order_items.quantity,
+			order_items.unit_price, order_items.subtotal, order_items.status,
+			COALESCE(order_items.note, '') AS note`).
+		Where("order_items.order_id IN (?) AND order_items.deleted_at IS NULL", ids).
+		Order("order_items.id asc").
+		Scan(&lines).Error; err != nil {
+		return nil, err
+	}
+	byOrder := make(map[uint][]AIBillLine, len(ids))
+	for _, line := range lines {
+		byOrder[line.OrderID] = append(byOrder[line.OrderID], line.AIBillLine)
+	}
+
+	bills := make([]AIBill, 0, len(rows))
+	for _, row := range rows {
+		bill := row.AIBill
+		bill.Lines = byOrder[row.ID]
+		bills = append(bills, bill)
+	}
+	return bills, nil
+}

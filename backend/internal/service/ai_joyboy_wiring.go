@@ -392,6 +392,61 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyOrderTypeForPeriodBody(label, rows), true, true
 
+	case joyboyToolOrderDetail:
+		// One bill, read whole. The shortlist is fetched first because it is also
+		// what the question is matched against: an order number the shop never
+		// issued cannot be looked up, and matching against the shop's own rows is
+		// the same rule the menu and ingredient lookups follow.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		recent, err := t.service.repo.RecentBills(t.restaurantID, joyboyRecentBillRows)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		if len(recent) == 0 {
+			return joyboyBillDetailBody(nil, nil, false, now), true, true
+		}
+		numbers := joyboyBillNumbers(recent)
+		matched, partial := aiFindNamedRowsInThread(numbers, question, t.history)
+		wanted := make([]string, 0, len(matched))
+		for _, index := range matched {
+			wanted = append(wanted, numbers[index])
+		}
+		if len(wanted) == 0 {
+			// Nothing named, so the shortlist itself is the answer. Only the
+			// newest few carry their dishes: enough for "บิลล่าสุดสั่งอะไร" without
+			// sending twenty bills of line items to the model.
+			head := recent
+			if len(head) > joyboyBillLinesFor {
+				head = head[:joyboyBillLinesFor]
+			}
+			full, err := t.service.repo.BillsByNumbers(t.restaurantID, joyboyBillNumbers(head))
+			if err != nil {
+				aiStage("warn", "joyboy: %s could not read the latest bills (%v) → listing them without items", tool, err)
+			} else {
+				withLines := make(map[string][]repository.AIBillLine, len(full))
+				for _, bill := range full {
+					withLines[bill.OrderNumber] = bill.Lines
+				}
+				for index := range recent {
+					recent[index].Lines = withLines[recent[index].OrderNumber]
+				}
+			}
+			return joyboyBillDetailBody(nil, recent, false, now), true, true
+		}
+		if len(wanted) > joyboyBillLinesFor {
+			wanted = wanted[:joyboyBillLinesFor]
+		}
+		named, err := t.service.repo.BillsByNumbers(t.restaurantID, wanted)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyBillDetailBody(named, recent, partial, now), true, true
+
 	case joyboyToolActiveOrders:
 		// Live state, like the table tool: only true for this minute, so it is read
 		// straight from the orders table rather than the 30-day snapshot.

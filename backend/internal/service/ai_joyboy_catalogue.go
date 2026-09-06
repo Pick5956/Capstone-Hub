@@ -151,12 +151,16 @@ const joyboyToolCustomerCount AIToolName = "get_customer_count"
 // promised to go and look — three runs, three promises, nothing ever fetched.
 const joyboyToolCancelledOrders AIToolName = "get_cancelled_orders"
 
-// The two lookup tools. Everything else here ranks or totals; these answer about
-// one named thing, which is the question an owner asks most and the one the
-// assistant used to answer worst — see ai_joyboy_detail.go for what went wrong.
+// The three lookup tools. Everything else here ranks or totals; these answer
+// about one named thing, which is the question an owner asks most and the one
+// the assistant used to answer worst — see ai_joyboy_detail.go for what went
+// wrong. get_order_detail is the same idea applied to a bill: the shop could be
+// asked what it sold this month but not what was on one table's bill, so
+// "ขอดูบิล 20260906-015" had no source at all.
 const (
 	joyboyToolIngredientDetail AIToolName = "get_ingredient_detail"
 	joyboyToolMenuDetail       AIToolName = "get_menu_detail"
+	joyboyToolOrderDetail      AIToolName = "get_order_detail"
 )
 
 // joyboyToolActiveOrders reads the floor right now: the tickets the kitchen is
@@ -225,6 +229,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolCancelledOrders,
 	joyboyToolIngredientDetail,
 	joyboyToolMenuDetail,
+	joyboyToolOrderDetail,
 	joyboyToolShopProfile,
 	joyboyToolActiveOrders,
 	joyboyToolMenuList,
@@ -263,6 +268,15 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ข้าวผัดปูใช้วัตถุดิบอะไร · ถ้าปิดขายเมนูนี้จะกระทบยอดขายแค่ไหน " +
 		"**สำคัญ: ถ้าคำถามเอ่ยชื่อเมนูเจาะจง ให้ใช้เครื่องมือนี้ ห้ามใช้ลิสต์อันดับ** " +
 		"เพราะลิสต์อันดับมีแค่ไม่กี่ตัว เมนูที่ไม่อยู่ในลิสต์ไม่ได้แปลว่าไม่มียอดขาย",
+	joyboyToolOrderDetail: "รายละเอียดของ \"บิลใบใดใบหนึ่ง\" ทั้งใบ " +
+		"บอกว่าบิลนั้นสั่งอะไรไปบ้าง อย่างละกี่จาน ราคาต่อหน่วยเท่าไหร่ ยอดก่อนหักลด ส่วนลด เซอร์วิสชาร์จ VAT ยอดสุทธิ " +
+		"เปิดบิลกี่โมง ปิดกี่โมง โต๊ะไหน กี่คน พนักงานคนไหน จ่ายเงินยังไง " +
+		"ใช้ตอบ: ขอดูบิล 20260906-015 · บิลนี้สั่งอะไรบ้าง · บิลล่าสุดเป็นยังไง · บิลใบนั้นทำไมแพง · บิลนี้ลดไปเท่าไหร่ " +
+		"**และใช้ตอบคำถามที่ถามถึงโต๊ะแต่ต้องการรายการอาหาร** เช่น โต๊ะ 5 สั่งอะไรไปบ้าง · " +
+		"โต๊ะ A03 กินอะไรไป · โต๊ะนี้ยอดเท่าไหร่ (get_table_status บอกได้แค่ว่าโต๊ะว่างหรือไม่ว่าง ไม่รู้ว่าสั่งอะไร) " +
+		"ถ้าคำถามเอ่ยเลขบิล ให้ใช้เครื่องมือนี้ · ถ้าผู้ใช้พูดลอย ๆ ว่าบิลล่าสุดหรือบิลเมื่อกี้ ก็ใช้เครื่องมือนี้ ระบบจะส่งบิลล่าสุดมาให้เลือกเอง " +
+		"ต่างจาก get_active_orders ที่บอกภาพรวมบิลที่ยังไม่ปิดทั้งหมด แต่ไม่บอกว่าในบิลมีอาหารอะไร " +
+		"ต่างจาก get_sales_for_period ที่ให้ยอดรวมของช่วงเวลา ไม่ใช่รายละเอียดของบิลใบเดียว",
 	joyboyToolCustomerCount: "จำนวนลูกค้า (คน) ที่มาร้านในช่วงเวลา นับจากจำนวนคนที่พนักงานลงไว้ตอนเปิดบิล " +
 		"พร้อมว่าส่วนใหญ่มากันกี่คนต่อบิล และตอนนี้มีคนนั่งค้างอยู่กี่คน " +
 		"รับช่วงเวลาได้ทุกแบบ (วันนี้ เมื่อวาน สัปดาห์ที่แล้ว เดือนนี้) ไม่ระบุ = 30 วันล่าสุด " +
@@ -290,6 +304,8 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"พร้อมรายชื่อโต๊ะว่าง เลขโต๊ะ จำนวนที่นั่ง และโซน " +
 		"ใช้ตอบ: โต๊ะว่างกี่โต๊ะ ร้านเต็มยัง มีโต๊ะรับกี่คนได้บ้าง โต๊ะไหนว่าง โต๊ะนี้ว่างไหม " +
 		"ตอนนี้มีคนกี่โต๊ะ โซนไหนคนแน่น มีใครจองไว้บ้าง " +
+		"บอกได้แค่ว่าโต๊ะว่างหรือไม่ว่าง **ไม่รู้ว่าโต๊ะนั้นสั่งอาหารอะไรไป** " +
+		"ถ้าถามว่าโต๊ะนั้นสั่งอะไร กินอะไรไปบ้าง หรือยอดเท่าไหร่ ให้ใช้ get_order_detail แทน " +
 		"ระบบนี้ดูสถานะได้อย่างเดียว จองหรือยกเลิกจองไม่ได้ " +
 		"แต่ถ้าผู้ใช้ขอให้จองโต๊ะหรือยกเลิกจอง **ก็ให้เลือกเครื่องมือนี้อยู่ดี** " +
 		"จะได้ตอบจากสถานะจริงว่าทำให้ไม่ได้ และบอกว่าต้องไปกดเองที่หน้าจัดการโต๊ะ",
@@ -376,7 +392,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,
 		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
 	}},
-	{"ดูรายตัวที่ระบุชื่อ", []AIToolName{joyboyToolIngredientDetail, joyboyToolMenuDetail}},
+	{"ดูรายตัวที่ระบุชื่อ", []AIToolName{joyboyToolIngredientDetail, joyboyToolMenuDetail, joyboyToolOrderDetail}},
 	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus, joyboyToolActiveOrders}},
 	{"ข้อมูลร้าน", []AIToolName{joyboyToolShopProfile}},
 	{"รายจ่าย", []AIToolName{joyboyToolExpenseSummary}},
