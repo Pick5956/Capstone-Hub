@@ -63,6 +63,10 @@ type AIAskResponse struct {
 	Planner        *AIPlannerMetadata       `json:"planner,omitempty"`
 	ToolsUsed      []AIToolName             `json:"tools_used,omitempty"`
 	DocSources     []AISystemDocSource      `json:"doc_sources,omitempty"`
+	// FollowUps are the questions the model suggested asking next, written in
+	// the owner's words at the end of the same reply. The client shows them as
+	// chips under the answer; tapping one sends it verbatim.
+	FollowUps      []string                 `json:"follow_ups,omitempty"`
 }
 
 type AIPlannerMetadata struct {

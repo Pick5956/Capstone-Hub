@@ -32,7 +32,7 @@ import {
   isTerminalAIActionCancellationError,
 } from "@/src/lib/aiActionPreview";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
-import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
+import { getAnswerChips, getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
 import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/lib/aiPendingPlan";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -590,11 +590,15 @@ export default function AIOperationsFloatingChat() {
         role: "assistant",
         content: formatAIActionPreviewAnswer(answer, data.action_preview, language),
         createdAt: new Date(),
-        actions: data.intent === "unclear"
-          ? getUnclearRequestActions(activeMembership, language)
-          : data.intent === "analysis"
-            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
-            : undefined,
+        // The model's own follow-ups win whatever the intent; the fixed lists
+        // are the fallback for a reply that came without them.
+        actions: data.follow_ups && data.follow_ups.length > 0
+          ? getAnswerChips(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed, data.follow_ups)
+          : data.intent === "unclear"
+            ? getUnclearRequestActions(activeMembership, language)
+            : data.intent === "analysis"
+              ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
+              : undefined,
         planId: data.action_plan?.id,
         previewId: data.action_preview?.id,
       };

@@ -13,7 +13,7 @@ import {
   isTerminalAIActionCancellationError,
 } from "@/src/lib/aiActionPreview";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
-import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
+import { getAnswerChips, getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
 import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/lib/aiPendingPlan";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -417,12 +417,17 @@ export default function AIAssistantPage() {
         setPlanCardState("pending");
         setPendingActionQuestion(trimmed);
       }
+      // The model's own follow-ups win whatever the intent — for a clarifying
+      // question they are the answers to pick from. The fixed lists are the
+      // fallback for a reply that came without them.
       const actions =
-        data.intent === "unclear"
-          ? getUnclearRequestActions(activeMembership, language)
-          : data.intent === "analysis"
-            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
-            : [];
+        data.follow_ups && data.follow_ups.length > 0
+          ? getAnswerChips(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed, data.follow_ups)
+          : data.intent === "unclear"
+            ? getUnclearRequestActions(activeMembership, language)
+            : data.intent === "analysis"
+              ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
+              : [];
       setMessages((prev) => [
         ...prev,
         {

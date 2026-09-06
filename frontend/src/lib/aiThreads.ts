@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { clearStoredChat, loadStoredMessages, saveMessages, type ChatWriteSource } from "./aiChatStorage";
-import { getGuidedActions, type AIGuidedAction } from "./aiGuidedActions";
+import { getAnswerChips, type AIGuidedAction } from "./aiGuidedActions";
 import type { AIChartData, AIConversationTurn, AIForecastResult, AISystemDocSource } from "../types/ai";
 import type { Membership } from "../types/restaurant";
 
@@ -219,6 +219,7 @@ export type AITurnDisplay = {
   doc_sources?: AISystemDocSource[];
   action_plan_id?: string;
   model?: string;
+  follow_ups?: string[];
 };
 
 /** One exchange of a reopened chat, in the shape both chat surfaces render. */
@@ -235,13 +236,13 @@ export type AIThreadMessage = {
   scopeAssumed?: boolean;
   docSources?: AISystemDocSource[];
   planId?: string;
+  followUps?: string[];
 };
 
 /**
  * Turns from the server become the messages the screen renders: a question
  * bubble and an answer bubble per turn, the answer carrying whatever display
- * data was stored with it. Follow-up chips are not stored — the page derives
- * them from the tool the same way it does for a fresh answer.
+ * data was stored with it, including the follow-ups the model wrote for it.
  */
 export function turnsToMessages(turns: AIConversationTurn[]): AIThreadMessage[] {
   const messages: AIThreadMessage[] = [];
@@ -262,6 +263,7 @@ export function turnsToMessages(turns: AIConversationTurn[]): AIThreadMessage[] 
       scopeAssumed: display.scope_assumed,
       docSources: display.doc_sources,
       planId: display.action_plan_id,
+      followUps: display.follow_ups,
     });
   }
   return messages;
@@ -269,9 +271,8 @@ export function turnsToMessages(turns: AIConversationTurn[]): AIThreadMessage[] 
 
 /**
  * A reopened chat, ready to render: the bubbles from the server plus the
- * follow-up chips the page would have offered under each answer. Chips were
- * never stored — they are a function of the tool that answered, and deriving
- * them here means a reopened chat looks exactly like it did the first time.
+ * follow-up chips under each answer — the model's own, stored with the turn,
+ * or the tool-derived fallback for a turn from before they were written.
  */
 export function hydrateThreadMessages(
   turns: AIConversationTurn[],
@@ -288,7 +289,7 @@ export function hydrateThreadMessages(
     }
     const question = index > 0 ? messages[index - 1].content : "";
     const tools = message.toolsUsed && message.toolsUsed.length > 0 ? message.toolsUsed : message.tool;
-    const actions = tools ? getGuidedActions(question, message.content, membership, language, tools, message.scopeAssumed) : [];
+    const actions = getAnswerChips(question, message.content, membership, language, tools, message.scopeAssumed, message.followUps);
     out.push(actions.length > 0 ? { ...message, actions } : message);
   }
   return out;

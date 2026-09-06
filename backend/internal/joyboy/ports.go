@@ -122,4 +122,8 @@ type Request struct {
 type Answer struct {
 	Text  string
 	Tools []string
+	// FollowUps are the questions the writer suggested asking next, in the
+	// owner's words, taken from the end of the same reply. Empty when the
+	// model left them out.
+	FollowUps []string
 }

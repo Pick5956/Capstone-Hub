@@ -268,6 +268,9 @@ export type AIAskResponse = {
   candidate_tools?: string[];
   tools_used?: string[];
   doc_sources?: AISystemDocSource[];
+  // Questions the model suggested asking next, in the owner's words. Shown as
+  // chips under the answer; a tap sends the text verbatim.
+  follow_ups?: string[];
   planner?: {
     provider: "groq" | "gemini" | "local_clarification_fallback" | string;
     model?: string;

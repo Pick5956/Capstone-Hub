@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getGuidedActions } from "@/src/lib/aiGuidedActions";
+import { getAnswerChips, getGuidedActions } from "@/src/lib/aiGuidedActions";
 import { membershipWith, ownerMembership } from "./fixtures";
 
 // These three pass the tool explicitly: since the chips became tool-driven, an
@@ -134,5 +134,32 @@ describe("chips follow the tools that ran, not the wording of the answer", () =>
   it("gives the floor tools no topic chips at all", () => {
     const actions = getGuidedActions("โต๊ะว่างมั้ย", "ว่างครบ 10 โต๊ะครับ", ownerMembership, "th", ["get_table_status"]);
     expect(actions).toEqual([]);
+  });
+});
+
+describe("getAnswerChips", () => {
+  const owner = ownerMembership;
+
+  it("shows the model's follow-ups verbatim, label and prompt alike", () => {
+    const chips = getAnswerChips("ของใกล้หมดมีอะไร", "ปีกไก่ใกล้หมด", owner, "th", ["get_low_stock_ingredients"], false, [
+      "ปีกไก่พอถึงเมื่อไหร่",
+      " สั่งปีกไก่เพิ่ม ",
+      "เมนูไหนใช้ปีกไก่",
+    ]);
+    expect(chips.map((c) => c.label)).toEqual(["ปีกไก่พอถึงเมื่อไหร่", "สั่งปีกไก่เพิ่ม", "เมนูไหนใช้ปีกไก่"]);
+    for (const chip of chips) expect(chip.prompt).toBe(chip.label);
+  });
+
+  it("falls back to the tool-keyed list when the model wrote none", () => {
+    const withNone = getAnswerChips("ของใกล้หมดมีอะไร", "", owner, "th", ["get_low_stock_ingredients"], false, []);
+    const fixed = getGuidedActions("ของใกล้หมดมีอะไร", "", owner, "th", ["get_low_stock_ingredients"], false);
+    expect(withNone).toEqual(fixed);
+  });
+
+  it("keeps the period pivots in front when the backend assumed a window", () => {
+    const chips = getAnswerChips("ยอดขายเท่าไหร่", "", owner, "th", ["get_sales_summary"], true, ["วันไหนขายดีสุด", "เมนูไหนทำเงินสุด", "เทียบเดือนก่อน"]);
+    expect(chips[0]?.id).toBe("fu-scope-today");
+    expect(chips.some((c) => c.label === "วันไหนขายดีสุด")).toBe(true);
+    expect(chips.length).toBeLessThanOrEqual(5);
   });
 });

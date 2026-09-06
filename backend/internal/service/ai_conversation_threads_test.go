@@ -34,6 +34,7 @@ func TestTurnDisplayCarriesChartAndToolsOnly(t *testing.T) {
 		ToolsUsed:    []AIToolName{AIToolGetSalesForPeriod},
 		Chart:        &AIChartData{Kind: "bar", Title: "เทียบ"},
 		ActionPlan:   &AIActionPlanResponse{ID: "plan-1"},
+		FollowUps:    []string{"วันไหนขายดีสุด"},
 	}
 	raw, err := json.Marshal(aiTurnDisplayFor(response))
 	if err != nil {
@@ -43,7 +44,7 @@ func TestTurnDisplayCarriesChartAndToolsOnly(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"chart", "tools_used", "scope_assumed", "action_plan_id", "model"} {
+	for _, key := range []string{"chart", "tools_used", "scope_assumed", "action_plan_id", "model", "follow_ups"} {
 		if _, ok := decoded[key]; !ok {
 			t.Errorf("display is missing %q: %s", key, raw)
 		}

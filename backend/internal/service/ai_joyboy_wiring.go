@@ -973,6 +973,12 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		Task:   task,
 		Model:  fmt.Sprintf("joyboy(%s)", strings.Join(answer.Tools, "+")),
 	}
+	// The model's follow-ups go out as written. The one case they are dropped
+	// is when its whole answer was replaced by Go's clarifying question above:
+	// they followed an answer the owner will not read.
+	if len(answer.Tools) > 0 || strings.TrimSpace(pendingClarification) == "" {
+		response.FollowUps = answer.FollowUps
+	}
 	// The tools that actually produced data, named for the client.
 	//
 	// This used to be left empty on this path, and the chat screen derives its

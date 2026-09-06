@@ -100,6 +100,37 @@ function canTopic(membership: Membership | null | undefined, topic: Topic): bool
   }
 }
 
+// How many chips sit under one answer. The model writes three; a period pivot
+// or two may come first when the backend flagged an assumed time window.
+const MAX_ANSWER_CHIPS = 5;
+
+/**
+ * The chips under an answer. When the model wrote follow-ups (in the owner's
+ * words, grounded in what it just said) those are the chips, verbatim — the
+ * label is the prompt. The fixed tool-keyed list below is the fallback for an
+ * answer without them, so no answer ever ends without a way forward.
+ *
+ * Period pivots stay in front either way: the backend knows for certain when
+ * it assumed a time window, and resolving that is the most likely next tap.
+ */
+export function getAnswerChips(
+  question: string,
+  answer: string,
+  membership: Membership | null | undefined,
+  language: "th" | "en",
+  tool?: string | string[],
+  scopeAssumed?: boolean,
+  followUps?: string[],
+): AIGuidedAction[] {
+  const written = (followUps ?? []).map((text) => text.trim()).filter(Boolean);
+  if (written.length === 0) return getGuidedActions(question, answer, membership, language, tool, scopeAssumed);
+  const pivots = scopeAssumed
+    ? getGuidedActions(question, answer, membership, language, tool, scopeAssumed).filter((action) => action.id.startsWith("fu-scope-"))
+    : [];
+  const chips = written.map((text, index) => ({ id: `fu-model-${index}`, label: text, prompt: text }));
+  return [...pivots, ...chips].slice(0, MAX_ANSWER_CHIPS);
+}
+
 export function getGuidedActions(
   question: string,
   answer: string,
