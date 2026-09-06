@@ -173,11 +173,19 @@ function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (nex
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        on ? "bg-orange-500" : "bg-gray-300 dark:bg-gray-700"
+      // A track with a little depth and a knob that sits on top of it. The knob
+      // keeps the same 2px inset on both ends: 44px track, 20px knob, 22px travel.
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.28),inset_0_0_0_1px_rgba(0,0,0,0.06)] transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+        on
+          ? "bg-gradient-to-b from-orange-400 to-orange-600"
+          : "bg-gradient-to-b from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-800"
       }`}
     >
-      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${on ? "translate-x-5" : "translate-x-0.5"}`} />
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-gradient-to-b from-white to-gray-100 shadow-[0_1px_1px_rgba(0,0,0,0.35),0_2px_5px_rgba(0,0,0,0.2),inset_0_-1px_1px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] transition-transform duration-200 ease-out ${
+          on ? "translate-x-[22px]" : "translate-x-0.5"
+        }`}
+      />
     </button>
   );
 }
