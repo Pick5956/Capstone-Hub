@@ -1495,3 +1495,30 @@ textarea {
     animation: none;
   }
 }
+
+/* The chat list: the sheet slides in from the left and back out, the column
+   fades its content when it swaps between the rail and the full list (the
+   width itself is a transition on the box). */
+@keyframes ai-chatlist-in {
+  from { transform: translateX(-12%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes ai-chatlist-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-12%); opacity: 0; }
+}
+@keyframes ai-chatlist-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ai-chatlist-pop {
+  from { transform: translateY(-4px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.ai-chatlist-sheet-in { animation: ai-chatlist-in 0.22s ease-out both; }
+.ai-chatlist-sheet-out { animation: ai-chatlist-out 0.2s ease-in both; pointer-events: none; }
+.ai-chatlist-fade { animation: ai-chatlist-fade 0.25s ease-out both; }
+.ai-chatlist-pop { animation: ai-chatlist-pop 0.14s ease-out both; transform-origin: top right; }
+@media (prefers-reduced-motion: reduce) {
+  .ai-chatlist-sheet-in, .ai-chatlist-sheet-out, .ai-chatlist-fade, .ai-chatlist-pop { animation: none; }
+}

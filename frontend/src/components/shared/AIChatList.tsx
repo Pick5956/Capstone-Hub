@@ -119,6 +119,14 @@ export default function AIChatList({
   // The "⋯" menu open on one row, if any. Closes on a click anywhere else or
   // on Escape, the way a menu is expected to.
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // The sheet leaves the way it came: the close request plays the exit
+  // animation first and tells the parent to unmount when it is done.
+  const [closing, setClosing] = useState(false);
+  const requestClose = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(() => onClose?.(), 220);
+  };
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!menuFor) return;
@@ -274,7 +282,7 @@ export default function AIChatList({
                       {menuFor === conversation.id && (
                         <div
                           role="menu"
-                          className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+                          className="ai-chatlist-pop absolute right-0 top-8 z-20 w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
                         >
                           <button
                             type="button"
@@ -285,7 +293,7 @@ export default function AIChatList({
                               setRenameDraft(conversation.title || "");
                               setRenaming(conversation);
                             }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
                           >
                             <Pencil className="h-3.5 w-3.5 text-gray-400" /> {t.rename}
                           </button>
@@ -297,7 +305,7 @@ export default function AIChatList({
                               setMenuFor(null);
                               setRemoving(conversation);
                             }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> {t.remove}
                           </button>
@@ -383,14 +391,14 @@ export default function AIChatList({
 
   if (variant === "sheet") {
     return (
-      <div className="absolute inset-0 z-30 flex flex-col bg-[#faf8f2] dark:bg-gray-900">
+      <div className={`absolute inset-0 z-30 flex flex-col bg-[#faf8f2] dark:bg-gray-900 ${closing ? "ai-chatlist-sheet-out" : "ai-chatlist-sheet-in"}`}>
         <div className="flex items-center justify-between px-3 pb-2 pt-3">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
             <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={t.close}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300"
           >
@@ -405,51 +413,56 @@ export default function AIChatList({
     );
   }
 
-  if (collapsed) {
-    return (
-      <div className={`w-11 shrink-0 flex-col items-center gap-1 border-r border-gray-200/70 py-3 dark:border-gray-800 ${className}`}>
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          aria-label={t.expand}
-          title={t.expand}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:hover:bg-gray-800"
-        >
-          <PanelLeftOpen className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onNew}
-          aria-label={t.newChat}
-          title={t.newChat}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-orange-600 hover:bg-orange-50 dark:text-orange-300 dark:hover:bg-orange-950/30"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-        {dialogs}
-      </div>
-    );
-  }
-
+  // One box whose width animates between the rail and the list; the content
+  // inside swaps with a short fade so neither state pops into place.
   return (
-    <div className={`w-64 shrink-0 flex-col border-r border-gray-200/70 dark:border-gray-800 ${className}`}>
-      <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
-          <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
-        </h2>
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          aria-label={t.collapse}
-          title={t.collapse}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:hover:bg-gray-800"
-        >
-          <PanelLeftClose className="h-4 w-4" />
-        </button>
-      </div>
-      {newChatButton}
-      {searchBox}
-      {list}
+    <div
+      className={`relative shrink-0 flex-col overflow-hidden border-r border-gray-200/70 transition-[width] duration-300 ease-in-out dark:border-gray-800 ${
+        collapsed ? "w-11" : "w-64"
+      } ${className}`}
+    >
+      {collapsed ? (
+        <div className="ai-chatlist-fade flex w-11 flex-col items-center gap-1 py-3">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={t.expand}
+            title={t.expand}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:hover:bg-gray-800"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onNew}
+            aria-label={t.newChat}
+            title={t.newChat}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-orange-600 hover:bg-orange-50 dark:text-orange-300 dark:hover:bg-orange-950/30"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="ai-chatlist-fade flex h-full w-64 flex-col">
+          <div className="flex items-center justify-between px-3 pb-2 pt-3">
+            <h2 className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+              <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
+            </h2>
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={t.collapse}
+              title={t.collapse}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:hover:bg-gray-800"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
+          {newChatButton}
+          {searchBox}
+          {list}
+        </div>
+      )}
       {dialogs}
     </div>
   );
