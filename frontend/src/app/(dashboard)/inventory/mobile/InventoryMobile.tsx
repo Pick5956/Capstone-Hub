@@ -85,6 +85,7 @@ function buildCopy(lang: "th" | "en") {
         clearFilter: "ล้างตัวกรอง",
         showResults: "ดูผลลัพธ์",
         allCategories: "ทุกหมวด",
+        sortRecent: "ล่าสุด",
         sortUrgent: "ด่วนก่อน",
         sortName: "ชื่อ ก-ฮ",
         sortValue: "มูลค่าสูงสุด",
@@ -145,6 +146,7 @@ function buildCopy(lang: "th" | "en") {
         clearFilter: "Clear filters",
         showResults: "Show results",
         allCategories: "All categories",
+        sortRecent: "Latest",
         sortUrgent: "Most urgent",
         sortName: "Name A-Z",
         sortValue: "Highest value",
@@ -199,7 +201,7 @@ export default function InventoryMobile({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | ItemStatus>("all");
   const [categoryId, setCategoryId] = useState(0);
-  const [sort, setSort] = useState<SortKey>("urgent");
+  const [sort, setSort] = useState<SortKey>("recent");
 
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -485,7 +487,7 @@ export default function InventoryMobile({
               aria-label={copy.filter}
               onClick={() => setSheet("filter")}
               className={`ui-press flex h-[52px] items-center justify-center rounded-(--inv-radius) border bg-(--inv-surface) ${
-                categoryId !== 0 || sort !== "urgent"
+                categoryId !== 0 || sort !== "recent"
                   ? "border-(--inv-action) text-(--inv-action)"
                   : "border-(--inv-hairline) text-(--inv-muted)"
               }`}
@@ -742,7 +744,7 @@ export default function InventoryMobile({
             <SecondaryButton
               onClick={() => {
                 setCategoryId(0);
-                setSort("urgent");
+                setSort("recent");
               }}
             >
               {copy.clearFilter}
@@ -769,6 +771,7 @@ export default function InventoryMobile({
           value={sort}
           onChange={setSort}
           options={[
+            { value: "recent", label: copy.sortRecent },
             { value: "urgent", label: copy.sortUrgent },
             { value: "name", label: copy.sortName },
             { value: "value", label: copy.sortValue },

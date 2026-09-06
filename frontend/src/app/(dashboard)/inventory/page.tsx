@@ -383,11 +383,18 @@ export default function InventoryPage() {
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
+  // What the list means when no column header is picked. "recent" — the row that
+  // just moved, whether a restock or the kitchen using it up — replaces the old
+  // out→low→ok default; that order is still one chip away as "urgent".
+  const [sortMode, setSortMode] = useState<"recent" | "urgent">("recent");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkClosing, setBulkClosing] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ ...bulkEmptyRow }]);
+  // Category every NEW row starts with, plus a one-tap "apply to all" — the same
+  // shape the mobile screen has, so the two do not drift.
+  const [bulkDefaultCategory, setBulkDefaultCategory] = useState(0);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState("");
 
@@ -533,8 +540,18 @@ export default function InventoryPage() {
         return true;
       })
       .sort((a, b) => {
-        // No column picked → default attention order: out → low → ok, then name.
         if (sortKey === "") {
+          if (sortMode === "recent") {
+            // UpdatedAt is bumped by every stock write — kitchen deduction,
+            // restock, even the daily seeder — so it is a truthful "last moved"
+            // with no second query. A name/price edit moves it too, which is
+            // close enough to "recently changed" to keep.
+            const left = a.UpdatedAt ? Date.parse(a.UpdatedAt) : 0;
+            const right = b.UpdatedAt ? Date.parse(b.UpdatedAt) : 0;
+            if (left !== right) return right - left;
+            return a.name.localeCompare(b.name);
+          }
+          // "urgent": out → low → ok, then name.
           const byStatus = statusRank[getStatus(a)] - statusRank[getStatus(b)];
           return byStatus !== 0 ? byStatus : a.name.localeCompare(b.name);
         }
@@ -545,7 +562,7 @@ export default function InventoryPage() {
         else if (sortKey === "price") cmp = a.cost_per_unit - b.cost_per_unit;
         return sortDir === "asc" ? cmp : -cmp;
       });
-  }, [ingredients, search, statusFilter, categoryFilter, sortKey, sortDir, categoryNameById, copy]);
+  }, [ingredients, search, statusFilter, categoryFilter, sortKey, sortMode, sortDir, categoryNameById, copy]);
 
   // Client-side paging of the already-loaded list — instant, no server round-trips.
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -1099,6 +1116,25 @@ export default function InventoryPage() {
                       </button>
                     ))}
                   </div>
+                  <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{lang === "th" ? "เรียงตาม" : "Sort by"}</p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {(["recent", "urgent"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => {
+                          setSortKey("");
+                          setSortMode(mode);
+                        }}
+                        className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
+                          sortKey === "" && sortMode === mode
+                            ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:text-white"
+                        }`}
+                      >
+                        {mode === "recent" ? (lang === "th" ? "ล่าสุด" : "Latest") : lang === "th" ? "ด่วนก่อน" : "Most urgent"}
+                      </button>
+                    ))}
+                  </div>
                   <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</p>
                   <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
                     <button
@@ -1125,12 +1161,14 @@ export default function InventoryPage() {
                       </button>
                     ))}
                   </div>
-                  {(statusFilter !== "all" || categoryFilter !== 0) && (
+                  {(statusFilter !== "all" || categoryFilter !== 0 || sortKey !== "" || sortMode !== "recent") && (
                     <button
                       type="button"
                       onClick={() => {
                         setStatusFilter("all");
                         setCategoryFilter(0);
+                        setSortKey("");
+                        setSortMode("recent");
                       }}
                       className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
                     >
@@ -1644,6 +1682,28 @@ export default function InventoryPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto p-4">
+              <div className="mb-3 flex flex-wrap items-end gap-2">
+                <div className="w-56">
+                  <p className="mb-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    {lang === "th" ? "หมวดของวัตถุดิบที่เพิ่มใหม่" : "Category for new ingredients"}
+                  </p>
+                  <ThemedSelect
+                    compact
+                    value={String(bulkDefaultCategory)}
+                    onChange={(value) => setBulkDefaultCategory(Number(value) || 0)}
+                    options={categoryOptions}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkRows((prev) => prev.map((row) => ({ ...row, category_id: bulkDefaultCategory })))}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+                >
+                  <Tags className="h-4 w-4" />
+                  {lang === "th" ? "ใช้หมวดหมู่กับทุกวัตถุดิบ" : "Apply this category to every ingredient"}
+                </button>
+              </div>
+
               <table className="w-full min-w-[760px] border-separate border-spacing-x-1 border-spacing-y-1 text-sm">
                 <thead>
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -1734,11 +1794,11 @@ export default function InventoryPage() {
 
               <button
                 type="button"
-                onClick={() => setBulkRows((prev) => [...prev, { ...bulkEmptyRow }])}
+                onClick={() => setBulkRows((prev) => [...prev, { ...bulkEmptyRow, category_id: bulkDefaultCategory }])}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-orange-400 hover:text-orange-600 dark:border-gray-700 dark:text-slate-300 dark:hover:border-orange-500"
               >
                 <Plus className="h-4 w-4" />
-                {lang === "th" ? "เพิ่มแถว" : "Add row"}
+                {lang === "th" ? "เพิ่มวัตถุดิบ" : "Add ingredient"}
               </button>
               {bulkError && <p className="mt-2 text-xs text-red-500">{bulkError}</p>}
             </div>
