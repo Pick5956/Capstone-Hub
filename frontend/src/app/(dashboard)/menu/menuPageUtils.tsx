@@ -138,7 +138,7 @@ export function AvailabilitySwitch({
       }}
       className={`flex h-6 w-11 items-center rounded-full border p-0.5 transition-[background-color,border-color,opacity] disabled:cursor-not-allowed disabled:opacity-60 ${
         checked
-          ? "border-emerald-500 bg-emerald-500 dark:border-emerald-400 dark:bg-emerald-400"
+          ? "border-emerald-400 bg-emerald-400 dark:border-emerald-300 dark:bg-emerald-300"
           : "border-gray-400 bg-gray-300 dark:border-gray-600 dark:bg-gray-700"
       }`}
     >
