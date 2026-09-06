@@ -109,6 +109,12 @@ type Request struct {
 	// OwnerTitle is what the assistant should call the owner ("คุณผู้จัดการ",
 	// "พี่เก่ง"). Empty leaves the persona as it is.
 	OwnerTitle string
+	// Today is the date the answer is written on, already in the owner's
+	// words ("วันอาทิตย์ที่ 6 กันยายน 2569"). Empty leaves it out. The tool
+	// reader has always known the date; the answer writer did not, and asked
+	// "สัปดาห์ก่อนคือวันที่เท่าไหร่" it hedged with "จากข้อมูลล่าสุด" over a
+	// question that has one plain answer.
+	Today string
 }
 
 // Answer is what the owner reads, plus the tools that produced it, which the

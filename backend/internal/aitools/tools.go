@@ -55,7 +55,10 @@ func ExecuteReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 		menu := snapshot.HighMarginMenus[0]
 		return AIToolResult{Tool: tool, HighestMarginMenu: &menu}, nil
 	case AIToolGetLowStockIngredients:
-		return AIToolResult{Tool: tool, LowStockIngredients: snapshot.StockRisks}, nil
+		// The summary rides along because the risk list is capped at twelve and
+		// the summary's counts are not — the sheet needs the true total.
+		summary := snapshot.InventorySummary
+		return AIToolResult{Tool: tool, LowStockIngredients: snapshot.StockRisks, InventoryValuation: &summary}, nil
 	case AIToolGetTopSellingMenus:
 		menus := snapshot.TopMenuItems
 		limit := 5

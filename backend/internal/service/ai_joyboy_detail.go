@@ -305,10 +305,10 @@ func joyboyIngredientDaysLeftLines(item entity.Ingredient, usage []repository.AI
 		dailyUse := row.Used / aitools.AnalysisWindowDays
 		daysLeft := item.Stock / dailyUse
 		return []string{
-			fmt.Sprintf("used_30d=%s %s daily_use=%s %s days_left=%s",
-				joyboyNum(row.Used), item.Unit, joyboyNum(dailyUse), item.Unit, joyboyNum(daysLeft)),
+			fmt.Sprintf("used_30d=%s %s daily_use=%s %s days_left=%s days_left_label=%s",
+				joyboyNum(row.Used), item.Unit, joyboyNum(dailyUse), item.Unit, joyboyNum(daysLeft), joyboyDaysLeftLabel(daysLeft)),
 			"days_left_means=จำนวนวันที่ของจะพอใช้ คิดจากอัตราใช้เฉลี่ย 30 วันล่าสุด " +
-				"ถ้าถามว่าจะหมดเมื่อไหร่ หรืออีกกี่วันต้องสั่งเพิ่ม ให้ตอบจากค่านี้ ห้ามประมาณเอง",
+				"ถ้าถามว่าจะหมดเมื่อไหร่ หรืออีกกี่วันต้องสั่งเพิ่ม ให้ตอบด้วยคำใน days_left_label ห้ามพูดเป็นทศนิยมของวัน ห้ามประมาณเอง",
 		}
 	}
 	return nil

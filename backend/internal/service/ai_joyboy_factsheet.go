@@ -169,8 +169,30 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				item.Name, aiStockStatusThai(item.Status), joyboyNum(item.Stock), item.Unit,
 				joyboyNum(item.MinStock), joyboyNum(item.RestockEstimate), joyboyNum(item.CostPerUnit)))
 		}
-		lines = append(lines, fmt.Sprintf("items_below_minimum=%d restock_all_cost=%s",
-			len(result.LowStockIngredients), joyboyNum(roundBaht(restockCost))))
+		// The list is the twelve most urgent, not the whole shelf: the snapshot
+		// caps it so a shop that is low on forty things does not send forty rows
+		// on every question. The count, though, has to be the shelf's — printed
+		// as len(list) it said "12 รายการ" over fifteen below minimum, and the
+		// restock total was the cost of twelve.
+		total := len(result.LowStockIngredients)
+		if result.InventoryValuation != nil {
+			if counted := result.InventoryValuation.LowItems + result.InventoryValuation.OutItems; counted > total {
+				total = counted
+			}
+		}
+		// restock_all_cost keeps its name when the list is the whole shelf; a
+		// capped list says restock_listed_cost so the total is not read as "all".
+		costKey := "restock_all_cost"
+		if total > len(result.LowStockIngredients) {
+			costKey = "restock_listed_cost"
+		}
+		lines = append(lines, fmt.Sprintf("items_below_minimum=%d listed=%d %s=%s",
+			total, len(result.LowStockIngredients), costKey, joyboyNum(roundBaht(restockCost))))
+		if total > len(result.LowStockIngredients) {
+			lines = append(lines, fmt.Sprintf("note=ต่ำกว่าขั้นต่ำทั้งหมด %d ตัว ใบนี้แสดง %d ตัวที่เร่งด่วนสุด "+
+				"restock_listed_cost คือค่าเติมเฉพาะที่แสดง ไม่ใช่ทั้งหมด ถ้าถามจำนวนให้ตอบ %d",
+				total, len(result.LowStockIngredients), total))
+		}
 		return joyboyJoin(lines), true
 
 	case AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus:
@@ -366,12 +388,16 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if len(result.ReorderForecast) == 0 {
 			return joyboyNoData("no_ingredient_usage_recorded_to_project_from"), true
 		}
-		lines := []string{window, "projection=stock_divided_by_average_daily_use"}
+		lines := []string{window, "projection=stock_divided_by_average_daily_use",
+			// The decimal is the arithmetic; the label is the answer. Left with
+			// only days_left=0.11 the model told the owner condensed milk would
+			// last "0.11 วัน", which nobody says. Go writes the words.
+			"note=ตอบเวลาที่จะหมดด้วยคำใน days_left_label ห้ามพูดเป็นทศนิยมของวัน เช่น 0.11 วัน"}
 		for _, item := range result.ReorderForecast {
 			lines = append(lines, fmt.Sprintf(
-				"ingredient=%s stock=%s unit=%s daily_use=%s days_left=%s",
+				"ingredient=%s stock=%s unit=%s daily_use=%s days_left=%s days_left_label=%s",
 				item.Name, joyboyNum(item.Stock), item.Unit,
-				joyboyNum(item.DailyUse), joyboyNum(item.DaysLeft)))
+				joyboyNum(item.DailyUse), joyboyNum(item.DaysLeft), joyboyDaysLeftLabel(item.DaysLeft)))
 		}
 		return joyboyJoin(lines), true
 
@@ -1749,4 +1775,21 @@ func joyboyTableUsageBody(label string, usage []repository.AITableUsage) string 
 		lines = append(lines, line)
 	}
 	return joyboyJoin(lines)
+}
+
+// joyboyDaysLeftLabel says when stock runs out the way a person would: "หมด
+// แล้ว", "หมดภายในวันนี้", "พอถึงพรุ่งนี้", then whole days. A fraction of a day
+// is arithmetic, not an answer.
+func joyboyDaysLeftLabel(daysLeft float64) string {
+	switch {
+	case daysLeft <= 0:
+		return "หมดแล้ว"
+	case daysLeft < 1:
+		return "หมดภายในวันนี้"
+	case daysLeft < 2:
+		return "พอถึงพรุ่งนี้"
+	case daysLeft < 7:
+		return fmt.Sprintf("พออีกประมาณ %d วัน", int(daysLeft))
+	}
+	return fmt.Sprintf("พออีกประมาณ %d วัน (%.0f สัปดาห์)", int(daysLeft), daysLeft/7)
 }

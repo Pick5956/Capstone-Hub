@@ -295,7 +295,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
-		reasons, err := t.service.repo.CancelledOrders(t.restaurantID, start, end)
+		reasons, err := t.service.repo.CancelledOrders(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
@@ -310,7 +310,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
-		parties, err := t.service.repo.GuestsByPartySize(t.restaurantID, start, end)
+		parties, err := t.service.repo.GuestsByPartySize(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
@@ -365,12 +365,12 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			return "", false, false
 		}
-		weekdays, err := t.service.repo.PeakSalesByWeekdayForRange(t.restaurantID, start, end)
+		weekdays, err := t.service.repo.PeakSalesByWeekdayForRange(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
 			return "", false, false
 		}
-		hours, err := t.service.repo.PeakSalesByHourForRange(t.restaurantID, start, end)
+		hours, err := t.service.repo.PeakSalesByHourForRange(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
 			return "", false, false
@@ -385,7 +385,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			return "", false, false
 		}
-		rows, err := t.service.repo.OrderTypeBreakdownForRange(t.restaurantID, start, end)
+		rows, err := t.service.repo.OrderTypeBreakdownForRange(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
 			return "", false, false
@@ -505,12 +505,12 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
-		mix, err := t.service.repo.PaymentMix(t.restaurantID, start, end)
+		mix, err := t.service.repo.PaymentMix(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		coverage, err := t.service.repo.PaymentCoverage(t.restaurantID, start, end)
+		coverage, err := t.service.repo.PaymentCoverage(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s coverage failed (%v) → leaving it out", tool, err)
 			return "", false, true
@@ -526,7 +526,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if !explicit {
 			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
-		usage, err := t.service.repo.TableUsage(t.restaurantID, start, end)
+		usage, err := t.service.repo.TableUsage(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
@@ -587,7 +587,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			// fallback when this read fails.
 			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
-		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, start, end)
+		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, start, joyboyQueryEnd(end))
 		if err != nil {
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the 30-day snapshot", tool, label, err)
 			return "", false, false
@@ -623,7 +623,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		period := AIPeriod{Label: label, Start: start, End: end}
-		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, period.Start, period.End)
+		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, period.Start, joyboyQueryEnd(period.End))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
@@ -659,12 +659,12 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				if newer.Start.Before(older.Start) {
 					newer, older = older, newer
 				}
-				dNewer, err := t.service.repo.SalesForRange(t.restaurantID, newer.Start, newer.End)
+				dNewer, err := t.service.repo.SalesForRange(t.restaurantID, newer.Start, joyboyQueryEnd(newer.End))
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				dOlder, err := t.service.repo.SalesForRange(t.restaurantID, older.Start, older.End)
+				dOlder, err := t.service.repo.SalesForRange(t.restaurantID, older.Start, joyboyQueryEnd(older.End))
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
@@ -679,7 +679,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]
-				d, err := t.service.repo.SalesForRange(t.restaurantID, p.Start, p.End)
+				d, err := t.service.repo.SalesForRange(t.restaurantID, p.Start, joyboyQueryEnd(p.End))
 				if err != nil {
 					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 					return "", false, true
@@ -701,7 +701,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			}
 		}
 		if year, ok := joyboyYearSalesTotal(question, now); ok {
-			d, err := t.service.repo.SalesForRange(t.restaurantID, year.Start, year.End)
+			d, err := t.service.repo.SalesForRange(t.restaurantID, year.Start, joyboyQueryEnd(year.End))
 			if err != nil {
 				aiStage("warn", "joyboy: %s (year) failed (%v) → leaving it out", tool, err)
 				return "", false, true
@@ -915,6 +915,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		History:    joyboyHistory(request.History),
 		Digest:     request.Digest,
 		OwnerTitle: s.preferencesFor(actor.RestaurantID).OwnerTitle,
+		Today:      joyboyTodayContext(repository.BangkokNow()),
 	})
 	if err != nil {
 		if errors.Is(err, joyboy.ErrUnavailable) {
@@ -1005,4 +1006,55 @@ func joyboyHistory(history []AIConversationMessage) []joyboy.Turn {
 		turns = append(turns, joyboy.Turn{Role: message.Role, Content: message.Content, Topic: message.Topic})
 	}
 	return turns
+}
+
+// joyboyQueryEnd is the end a period query actually runs with: the period's
+// own end, or this minute if the period reaches past it.
+//
+// "สัปดาห์นี้" ends at midnight tonight, and the demo data is written a whole
+// day at a time — so at 20:21 the week's total carried three bills that close
+// at 20:24, 20:41 and 21:12, and the sheet said "ยอดจนถึงตอนนี้" over a figure
+// that was not. A real shop cannot close a bill in the future, so on live data
+// this changes nothing; on seeded data it makes "as of now" true. The period's
+// own end stays as it is — the label and the days-elapsed arithmetic read that,
+// not this.
+func joyboyQueryEnd(end time.Time) time.Time {
+	if now := repository.BangkokNow(); end.After(now) {
+		return now
+	}
+	return end
+}
+
+// joyboyTodayContext is the calendar the answer is written against: the date,
+// and this week and last week spelled out as Monday–Sunday ranges.
+//
+// Given only the date, the writer worked the weeks out itself and started
+// them on Sunday — "สัปดาห์ก่อน = อาทิตย์ 30 ส.ค. ถึง เสาร์ 5 ก.ย." — and the
+// next question read "สัปดาห์นี้" through that wrong answer in the history and
+// came back with today's takings. The shop counts weeks Monday to Sunday, the
+// same rule the period reader follows; Go writes both ranges so the writer
+// has nothing to compute.
+func joyboyTodayContext(now time.Time) string {
+	thisMonday, lastMonday := joyboyWeekStarts(now)
+	return fmt.Sprintf("%s · สัปดาห์นี้ (จันทร์–อาทิตย์) = %s ถึง %s · สัปดาห์ก่อน = %s ถึง %s",
+		thaiDateWithWeekday(now),
+		formatThaiDate(thisMonday.Format("2006-01-02")), formatThaiDate(thisMonday.AddDate(0, 0, 6).Format("2006-01-02")),
+		formatThaiDate(lastMonday.Format("2006-01-02")), formatThaiDate(lastMonday.AddDate(0, 0, 6).Format("2006-01-02")))
+}
+
+// joyboyWeekStarts returns the Monday of the week holding now and the Monday
+// before it, at midnight in now's location.
+func joyboyWeekStarts(now time.Time) (thisMonday, lastMonday time.Time) {
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	back := (int(day.Weekday()) + 6) % 7 // Monday → 0, Sunday → 6
+	thisMonday = day.AddDate(0, 0, -back)
+	return thisMonday, thisMonday.AddDate(0, 0, -7)
+}
+
+// thaiDateWithWeekday is "วันอาทิตย์ที่ 6 กันยายน 2569" — the form a person
+// says a date in, weekday first, because "สัปดาห์ก่อน" is counted from the
+// weekday.
+func thaiDateWithWeekday(t time.Time) string {
+	weekdays := [...]string{"อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"}
+	return fmt.Sprintf("วัน%sที่ %s", weekdays[t.Weekday()], formatThaiDate(t.Format("2006-01-02")))
 }

@@ -81,6 +81,7 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   แม้จะถูกถามซ้ำ ถูกแย้ง หรือถูกบอกว่าคำตอบก่อนหน้าผิด ก็ยังห้ามเดา
 - ห้ามอธิบายว่าระบบทำงานข้างในยังไง เพราะคุณไม่ได้รับข้อมูลนั้นมา
 - **ห้ามสัญญาว่าจะไปทำอะไรให้ทีหลัง** เช่น "เดี๋ยวขอไปดึงข้อมูลก่อน" "ขอเช็คสักครู่แล้วค่อยถามใหม่"
+- ศัพท์: orders/bills บนใบข้อมูล = จำนวน "บิล" ให้เรียกว่า บิล เสมอ ห้ามเรียกว่า รายการ (รายการ = จานอาหารในบิล คนละอย่างกัน)
   "ถ้ามีอัปเดตจะรีบแจ้ง" เพราะคุณไม่มีรอบถัดไป ทุกอย่างที่ทำได้ทำไปแล้วในคำตอบนี้
   ถ้าเรื่องที่ถามไม่มีข้อมูลมาให้ ให้บอกตรง ๆ ว่าตอนนี้ยังดูเรื่องนี้ให้ไม่ได้
   และถ้ารู้ว่าดูเองได้ที่หน้าไหนก็บอกไปด้วย
@@ -333,6 +334,16 @@ const noDataAnswerTemplate = joyboyPersona + `
 // conversation. joyboy does not interpret it — it only makes sure the model reads
 // it as "this was said before", not as "this is true now", because the shop's
 // figures move under it constantly.
+// todayLine tells the writer what day it is, in the same dynamic block as the
+// title and the digest so the cacheable prefix stays static.
+func todayLine(today string) string {
+	today = strings.TrimSpace(today)
+	if today == "" {
+		return ""
+	}
+	return "วันนี้คือ" + today + " (ใช้ตอบคำถามเรื่องวันที่ เช่น สัปดาห์ก่อนคือวันไหน)\n"
+}
+
 // ownerTitleLine is the one dynamic line about the owner: what to call them.
 // It rides in front of the digest — the same "things said before" block, read
 // the same way — so the static persona and rules stay a cacheable prefix and
