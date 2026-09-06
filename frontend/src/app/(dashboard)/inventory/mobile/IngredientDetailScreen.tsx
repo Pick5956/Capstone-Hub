@@ -202,8 +202,11 @@ export default function IngredientDetailScreen({
                         </span>
                       )}
                     </p>
-                    <p className="truncate text-[11px] text-(--inv-faint)">
-                      {row.created_by_name || "—"}
+                    {/* Same reason as the whole-inventory history: the note is
+                        why the stock moved, and on this screen it is the only
+                        place a sale names the order it came from. */}
+                    <p className="truncate text-[11px] text-(--inv-faint)" title={row.note}>
+                      {row.note || row.created_by_name || "—"}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">

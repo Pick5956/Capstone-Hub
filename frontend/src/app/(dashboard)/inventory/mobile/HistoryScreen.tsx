@@ -332,6 +332,16 @@ export default function HistoryScreen({
                           {typeLabel}
                           {row.created_by_name ? ` · ${row.created_by_name}` : ""}
                         </p>
+                        {/* The note answers "why did this stock move" — for a
+                            sale it names the order and the dish — which is a
+                            different question from "who did it", so it gets its
+                            own line rather than replacing the person. Only rows
+                            that have something to say grow taller. */}
+                        {row.note && (
+                          <p className="truncate text-[11px] text-(--inv-faint)" title={row.note}>
+                            {row.note}
+                          </p>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-(--inv-heading)">

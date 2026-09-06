@@ -193,7 +193,10 @@ func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, rest
 			IngredientID: ingredient.ID,
 			Quantity:     required,
 			CostSnapshot: cost,
-			Note:         fmt.Sprintf("auto deduction for order %s / %s", order.OrderNumber, item.MenuName),
+			// Reads on the phone as "ตัดอัตโนมัติ · ORD-0042 · ผัดกะเพราหมู": the
+			// answer to "why did this stock disappear", in the language of the
+			// person asking. The menu name in it was always Thai regardless.
+			Note:         fmt.Sprintf("ตัดอัตโนมัติ · %s · %s", order.OrderNumber, item.MenuName),
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateInventoryDeduction(deduction); err != nil {

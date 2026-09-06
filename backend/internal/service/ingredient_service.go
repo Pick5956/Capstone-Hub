@@ -495,8 +495,13 @@ func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *e
 		Quantity:     ingredient.Stock,
 		// Opening stock is bought stock: value it the same way a restock with no
 		// typed amount is valued.
-		Amount:      referenceRestockAmount(ingredient.CostPerUnit, ingredient.Stock),
-		Note:        "initial stock",
+		Amount: referenceRestockAmount(ingredient.CostPerUnit, ingredient.Stock),
+		// Thai, because this string is shown verbatim: on the movement history,
+		// in the exported CSV, and — joined to the ingredient name — as the note
+		// on the expense row this create writes. The field already carries Thai
+		// that cannot be translated anyway (menu names, ingredient names, notes
+		// people type), so an English marker here is a false consistency.
+		Note:        "ยอดเริ่มต้น",
 		CreatedByID: userID,
 	}
 }

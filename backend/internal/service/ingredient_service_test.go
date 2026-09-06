@@ -110,7 +110,7 @@ func TestBuildInitialStockTransaction(t *testing.T) {
 	if tx.RestaurantID != 9 || tx.IngredientID != 27 || tx.CreatedByID != 41 {
 		t.Fatalf("buildInitialStockTransaction() identity = %#v", tx)
 	}
-	if tx.Type != "adjust" || tx.Quantity != 12.5 || tx.Note != "initial stock" {
+	if tx.Type != "adjust" || tx.Quantity != 12.5 || tx.Note != "ยอดเริ่มต้น" {
 		t.Fatalf("buildInitialStockTransaction() values = %#v", tx)
 	}
 
