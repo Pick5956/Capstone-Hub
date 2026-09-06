@@ -50,11 +50,11 @@ describe("chat deletion confirmation", () => {
     const remove = calls.find((props) => props.includes("t.removeTitle"));
     expect(remove).toBeDefined();
     expect(remove).toMatch(/description=\{[\s\S]{0,240}?removeDescription/);
-    // Deleting is the red button; renaming borrows the frame but not the alarm.
+    // Deleting is the red button. Renaming is not a dialog at all: the title
+    // turns into a text field on its own row, so it never borrows the alarm.
     expect(remove).not.toContain('tone="primary"');
-    const rename = calls.find((props) => props.includes("t.renameTitle"));
-    expect(rename).toContain('tone="primary"');
-    expect(styles).toMatch(/\.warm-dialog-btn-primary\s*\{[^}]*background: #c67139/);
+    expect(calls.some((props) => props.includes("t.renameTitle"))).toBe(false);
+    expect(chatList).toContain("aria-label={t.renameTitle}");
   });
 
   it("opens with focus on the safe button", () => {

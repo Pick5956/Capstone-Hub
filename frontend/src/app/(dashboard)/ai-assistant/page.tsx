@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, BarChart3, Bot, ChevronDown, Loader2, Maximize2, MessageSquareText, Minimize2, Send, Settings, Square, SquarePen, X } from "lucide-react";
+import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, MessageSquareText, Minimize2, Send, Settings, Square, SquarePen, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage, getAISettings } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -206,7 +206,7 @@ export default function AIAssistantPage() {
   // what is there.
   const skipServerLoadRef = useRef<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  // A centred modal on a wide screen, a full sheet on a phone.
+  // A card off the chats button on a wide screen, a full sheet on a phone.
   const wideScreen = useMediaQuery("(min-width: 640px)");
   // Switching chats leaves the current one behind, and a preview waiting on
   // it must be settled first — the server holds one at a time.
@@ -758,7 +758,7 @@ export default function AIAssistantPage() {
             top-right button — the conversation keeps the whole width. */}
         {listOpen && (
           <AIChatList
-            variant={wideScreen ? "modal" : "sheet"}
+            variant={wideScreen ? "panel" : "sheet"}
             language={language}
             activeId={activeThread}
             onOpen={openThread}
@@ -794,7 +794,7 @@ export default function AIAssistantPage() {
                 }
                 className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
               >
-                <BarChart3 className="h-3.5 w-3.5" />
+                <Bell className="h-3.5 w-3.5" />
                 {insightsCount > 0 && (
                   <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#faf8f2] dark:ring-gray-950">
                     {insightsCount}

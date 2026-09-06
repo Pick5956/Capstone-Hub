@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { MessageSquareText, MoreHorizontal, Pencil, Plus, Search, SquarePen, Trash2, X } from "lucide-react";
 import { deleteAIConversation, listAIConversations, renameAIConversation } from "@/src/lib/ai";
 import { matchesThreadQuery, notifyConversationsChanged, threadGroup, useConversationsVersion, type AIThreadGroup } from "@/src/lib/aiThreads";
@@ -11,10 +10,14 @@ import type { AIConversationSummary } from "@/src/types/ai";
 // The chat list — one component, two shapes.
 //
 // On a phone (and inside the floating chat) it is a sheet that slides over
-// the conversation. On a wide screen it is a modal in the middle of the
-// screen — search on top, "new chat" first, then the chats by day — the way
-// ChatGPT's ⌘K list works. The conversation keeps the whole width either way.
-type Variant = "sheet" | "modal";
+// the conversation. On a wide screen it is a card hanging off the chats
+// button in the top-right corner, the same way the insights panel hangs off
+// the bell — search on top, "new chat" first, then the chats by day. The
+// conversation keeps the whole width either way.
+//
+// Renaming happens in place: the title turns into a text field on the row,
+// Enter keeps it, Escape drops it, clicking elsewhere keeps it.
+type Variant = "sheet" | "panel";
 
 function copy(language: "th" | "en") {
   return language === "th"
@@ -115,15 +118,15 @@ export default function AIChatList({
     setClosing(true);
     window.setTimeout(() => onClose?.(), 220);
   };
-  // The modal opens with the cursor in the search box and leaves on Escape,
-  // unless a rename/delete dialog is up — that one owns Escape then.
+  // The panel opens with the cursor in the search box and leaves on Escape,
+  // unless a rename or the delete dialog is up — that one owns Escape then.
   const searchRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    if (variant !== "modal") return;
+    if (variant !== "panel") return;
     searchRef.current?.focus();
   }, [variant]);
   useEffect(() => {
-    if (variant !== "modal") return;
+    if (variant !== "panel") return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !renaming && !removing) requestClose();
     };
@@ -186,7 +189,11 @@ export default function AIChatList({
   const commitRename = async () => {
     if (!renaming) return;
     const title = renameDraft.trim();
-    if (!title) return;
+    // Nothing typed, or the same name: just leave the field.
+    if (!title || title === (renaming.title || "")) {
+      setRenaming(null);
+      return;
+    }
     setBusy(true);
     try {
       await renameAIConversation(renaming.id, title);
@@ -240,6 +247,39 @@ export default function AIChatList({
               {grouped[group].map((conversation) => {
                 const active = conversation.id === activeId;
                 const title = conversation.title || t.untitled;
+                if (renaming?.id === conversation.id) {
+                  return (
+                    <div key={conversation.id} className={`${rowButton} bg-white ring-2 ring-orange-400/60 dark:bg-gray-900`}>
+                      <span className="min-w-0 flex-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={renameDraft}
+                          maxLength={80}
+                          disabled={busy}
+                          onChange={(event) => setRenameDraft(event.target.value)}
+                          onFocus={(event) => event.target.select()}
+                          onBlur={() => void commitRename()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void commitRename();
+                            } else if (event.key === "Escape") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setRenaming(null);
+                            }
+                          }}
+                          aria-label={t.renameTitle}
+                          className="block w-full bg-transparent text-[13px] font-medium leading-5 text-gray-900 outline-none dark:text-gray-100"
+                        />
+                        <span className="mt-0.5 block text-[11px] leading-4 text-gray-400 dark:text-gray-500">
+                          {timeLabel(conversation.updated_at, language, group)}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                }
                 return (
                   <div key={conversation.id} className="relative">
                     <button
@@ -249,7 +289,7 @@ export default function AIChatList({
                       className={`${rowButton} ${
                         active
                           ? "bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200"
-                          : variant === "modal"
+                          : variant === "panel"
                             ? "text-gray-700 hover:bg-orange-50/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
                             : "text-gray-700 hover:bg-white/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
                       }`}
@@ -355,33 +395,6 @@ export default function AIChatList({
   const dialogs = (
     <>
       <WarmConfirmDialog
-        open={renaming !== null}
-        title={t.renameTitle}
-        description={t.renameDescription}
-        confirmLabel={t.renameSave}
-        cancelLabel={t.cancel}
-        onConfirm={() => void commitRename()}
-        onCancel={() => setRenaming(null)}
-        busy={busy}
-        tone="primary"
-        icon={<Pencil size={26} strokeWidth={2.5} />}
-        initialFocus="content"
-      >
-        <input
-          type="text"
-          value={renameDraft}
-          maxLength={80}
-          onChange={(event) => setRenameDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void commitRename();
-            }
-          }}
-          aria-label={t.renameTitle}
-        />
-      </WarmConfirmDialog>
-      <WarmConfirmDialog
         open={removing !== null}
         title={t.removeTitle}
         description={removing ? `“${removing.title || t.untitled}” — ${t.removeDescription}` : t.removeDescription}
@@ -394,21 +407,18 @@ export default function AIChatList({
     </>
   );
 
-  if (variant === "modal") {
-    if (typeof document === "undefined") return null;
-    return createPortal(
-      <div
-        className={`fixed inset-0 z-[var(--z-modal)] flex items-start justify-center px-4 pt-[10vh] ${closing ? "ai-chatlist-modal-out" : "ai-chatlist-modal-in"}`}
-      >
-        <div className="ai-chatlist-backdrop absolute inset-0 bg-[#2b1a0e]/40 backdrop-blur-[2px]" onClick={requestClose} aria-hidden="true" />
+  if (variant === "panel") {
+    return (
+      <div className={closing ? "ai-chatlist-panel-out" : "ai-chatlist-panel-in"}>
+        {/* Clicking anywhere else closes the card, the way a popover behaves. */}
+        <div className="ai-chatlist-backdrop fixed inset-0 z-30" onClick={requestClose} aria-hidden="true" />
         <div
           role="dialog"
-          aria-modal="true"
           aria-label={t.title}
-          className="ai-chatlist-card relative flex max-h-[min(72vh,640px)] w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border border-orange-100/80 bg-[#fdfbf6] shadow-[0_30px_90px_-24px_rgba(60,30,10,0.45)] dark:border-gray-700 dark:bg-gray-900"
+          className="ai-chatlist-card absolute right-3 top-14 z-40 flex max-h-[min(32rem,calc(100%-4.5rem))] w-[380px] origin-top-right flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl shadow-gray-950/20 dark:border-gray-800 dark:bg-gray-900"
         >
-          <div className="flex items-center gap-3 border-b border-orange-100/80 px-4 dark:border-gray-800">
-            <Search className="h-[18px] w-[18px] shrink-0 text-gray-400" aria-hidden="true" />
+          <div className="flex items-center gap-2.5 border-b border-gray-100 px-3.5 dark:border-gray-800">
+            <Search className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
             <input
               ref={searchRef}
               type="search"
@@ -416,13 +426,13 @@ export default function AIChatList({
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t.search}
               aria-label={t.search}
-              className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100"
+              className="h-12 min-w-0 flex-1 bg-transparent text-[14px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100"
             />
             <button
               type="button"
               onClick={requestClose}
               aria-label={t.close}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-orange-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             >
               <X className="h-4 w-4" />
             </button>
@@ -431,10 +441,10 @@ export default function AIChatList({
             <button
               type="button"
               onClick={onNew}
-              className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-[13.5px] font-medium text-gray-800 transition-colors hover:bg-orange-50/70 dark:text-gray-100 dark:hover:bg-gray-800/70"
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-[13px] font-medium text-gray-800 transition-colors hover:bg-orange-50/70 dark:text-gray-100 dark:hover:bg-gray-800/70"
             >
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300">
-                <SquarePen className="h-4 w-4" />
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300">
+                <SquarePen className="h-3.5 w-3.5" />
               </span>
               {t.newChat}
             </button>
@@ -442,8 +452,7 @@ export default function AIChatList({
           {list}
           {dialogs}
         </div>
-      </div>,
-      document.body,
+      </div>
     );
   }
 
