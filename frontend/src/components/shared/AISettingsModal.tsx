@@ -182,8 +182,12 @@ function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (nex
       }`}
     >
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-gradient-to-b from-white to-gray-100 shadow-[0_1px_1px_rgba(0,0,0,0.35),0_2px_5px_rgba(0,0,0,0.2),inset_0_-1px_1px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] transition-transform duration-200 ease-out ${
-          on ? "translate-x-[22px]" : "translate-x-0.5"
+        // Pinned 2px from the top and the left; "on" slides it by the free
+        // width (44 − 20 − 2×2 = 20px) so the right inset is the same 2px. The
+        // shadow drops straight down — a soft spread to the side read as extra
+        // room on the right.
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-gradient-to-b from-white to-gray-100 shadow-[0_1px_1px_rgba(0,0,0,0.35),0_2px_3px_-1px_rgba(0,0,0,0.25),inset_0_-1px_1px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] transition-transform duration-200 ease-out ${
+          on ? "translate-x-5" : "translate-x-0"
         }`}
       />
     </button>
