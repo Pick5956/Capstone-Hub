@@ -81,9 +81,9 @@ const navigationEntries: NavigationEntry[] = [
   },
   {
     href: "/ai-assistant",
-    label: { th: "AI ผู้ช่วย", en: "AI assistant" },
+    label: { th: "Dishy AI", en: "Dishy AI" },
     permission: ["view_reports", "manage_inventory"],
-    aliases: ["ai", "assistant", "ai assistant", "copilot", "ผู้ช่วย ai", "ai ผู้ช่วย"],
+    aliases: ["ai", "assistant", "ai assistant", "copilot", "dishy", "dishy ai", "ผู้ช่วย ai", "ai ผู้ช่วย"],
   },
   {
     href: "/staff",

@@ -205,23 +205,6 @@ export default function AIAssistantPage() {
   // what is there.
   const skipServerLoadRef = useRef<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  const [listCollapsed, setListCollapsed] = useState(false);
-  useEffect(() => {
-    try {
-      setListCollapsed(window.localStorage.getItem("aiChatListCollapsed") === "1");
-    } catch {
-      // No storage: the list starts open.
-    }
-  }, []);
-  const toggleListCollapsed = () =>
-    setListCollapsed((current) => {
-      try {
-        window.localStorage.setItem("aiChatListCollapsed", current ? "0" : "1");
-      } catch {
-        // Not remembered, still toggled.
-      }
-      return !current;
-    });
   // Switching chats leaves the current one behind, and a preview waiting on
   // it must be settled first — the server holds one at a time.
   const openThread = async (conversationId: string | null) => {
@@ -768,18 +751,8 @@ export default function AIAssistantPage() {
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
       <section className="relative flex min-h-0 flex-1">
-        {/* The chat list: a column beside the conversation on a wide screen, a
-            sheet over it on a phone. One component, placed twice. */}
-        <AIChatList
-          variant="column"
-          language={language}
-          activeId={activeThread}
-          onOpen={openThread}
-          onNew={() => openThread(null)}
-          collapsed={listCollapsed}
-          onToggleCollapsed={toggleListCollapsed}
-          className="hidden lg:flex"
-        />
+        {/* The chat list is a sheet on every screen size, opened from the
+            top-right button — the conversation keeps the whole width. */}
         {listOpen && (
           <AIChatList
             variant="sheet"
@@ -802,7 +775,7 @@ export default function AIAssistantPage() {
                 type="button"
                 onClick={() => setListOpen(true)}
                 aria-label={copy.chats}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white lg:hidden"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
               >
                 <MessageSquareText className="h-3.5 w-3.5" />
               </button>
