@@ -23,7 +23,7 @@ import { formatAdaptiveNumber as formatNumber, formatCurrency } from "@/src/lib/
 import { exportStockCSV } from "@/src/lib/ingredient";
 import type { Ingredient } from "@/src/types/ingredient";
 import { getStatus, type ItemStatus } from "../inventoryPageUtils";
-import { formatDaysLeft, getStockPercent } from "../inventoryPageUtils";
+import { getStockPercent } from "../inventoryPageUtils";
 import { useInventoryData } from "./useInventoryData";
 import {
   BottomSheet,
@@ -543,7 +543,6 @@ export default function InventoryMobile({
             {visible.map((item) => {
               const tone = statusTone(getStatus(item), lang);
               const percent = getStockPercent(item);
-              const cover = formatDaysLeft(item, lang);
               const checked = selected.has(item.ID);
               return (
                 <div
@@ -613,7 +612,6 @@ export default function InventoryMobile({
                             style={{ width: `${percent}%` }}
                           />
                         </div>
-                        {cover && <p className="mt-1 text-[11px] text-(--inv-faint)">{cover}</p>}
                       </>
                     )}
 

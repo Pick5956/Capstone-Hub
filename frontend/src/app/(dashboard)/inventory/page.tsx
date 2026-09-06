@@ -51,7 +51,6 @@ import {
   buildAdjustStockPayload,
   getInventoryValue,
   getStatus,
-  formatDaysLeft,
   getStockPercent,
   inputCls,
   STORAGE_TYPES,
@@ -1342,7 +1341,6 @@ export default function InventoryPage() {
                         const status = getStatus(item);
                         const meta = statusMeta(status, copy);
                         const percent = getStockPercent(item);
-                        const cover = formatDaysLeft(item, lang);
 
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
@@ -1379,7 +1377,6 @@ export default function InventoryPage() {
                                     <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
                                       <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
                                     </div>
-                                    {cover && <p className="mt-1 text-[10px] leading-none text-slate-400">{cover}</p>}
                                   </>
                                 )}
                               </div>
