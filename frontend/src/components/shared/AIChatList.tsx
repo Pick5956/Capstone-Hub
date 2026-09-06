@@ -252,7 +252,7 @@ export default function AIChatList({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium leading-5">{title}</span>
                         <span className={`mt-0.5 block text-[11px] leading-4 ${active ? "text-orange-600/80 dark:text-orange-300/70" : "text-gray-400 dark:text-gray-500"}`}>
-                          {t.questions(conversation.turn_count)} · {timeLabel(conversation.updated_at, language, group)}
+                          {timeLabel(conversation.updated_at, language, group)}
                         </span>
                       </span>
                     </button>

@@ -1036,10 +1036,17 @@ func joyboyQueryEnd(end time.Time) time.Time {
 // has nothing to compute.
 func joyboyTodayContext(now time.Time) string {
 	thisMonday, lastMonday := joyboyWeekStarts(now)
-	return fmt.Sprintf("%s · สัปดาห์นี้ (จันทร์–อาทิตย์) = %s ถึง %s · สัปดาห์ก่อน = %s ถึง %s",
+	day := func(t time.Time) string { return formatThaiDate(t.Format("2006-01-02")) }
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// The rolling windows too: "7 วันก่อน คือวันไหน" once came back as the
+	// last seven days, while the trend tool's "7 วันก่อนหน้า" meant the seven
+	// before those — the same words naming two ranges in one chat.
+	return fmt.Sprintf("%s · สัปดาห์นี้ (จันทร์–อาทิตย์) = %s ถึง %s · สัปดาห์ก่อน = %s ถึง %s · 7 วันล่าสุด (รวมวันนี้) = %s ถึง %s · 7 วันก่อนหน้านั้น = %s ถึง %s",
 		thaiDateWithWeekday(now),
-		formatThaiDate(thisMonday.Format("2006-01-02")), formatThaiDate(thisMonday.AddDate(0, 0, 6).Format("2006-01-02")),
-		formatThaiDate(lastMonday.Format("2006-01-02")), formatThaiDate(lastMonday.AddDate(0, 0, 6).Format("2006-01-02")))
+		day(thisMonday), day(thisMonday.AddDate(0, 0, 6)),
+		day(lastMonday), day(lastMonday.AddDate(0, 0, 6)),
+		day(today.AddDate(0, 0, -6)), day(today),
+		day(today.AddDate(0, 0, -13)), day(today.AddDate(0, 0, -7)))
 }
 
 // joyboyWeekStarts returns the Monday of the week holding now and the Monday

@@ -180,11 +180,14 @@ export function getGuidedActions(
     });
   }
 
-  // Follow-up question chips: clicking re-asks a related question (uses `prompt`).
+  // Follow-up question chips: clicking asks exactly the words on the chip. The
+  // label IS the prompt — a chip that reads one thing and sends another makes
+  // the answer look like it ignored the tap.
   const followUps: AIGuidedAction[] = [];
-  const addFollowUp = (id: string, labelTh: string, labelEn: string, promptTh: string, promptEn: string) => {
+  const addFollowUp = (id: string, promptTh: string, promptEn: string) => {
     if (followUps.some((existing) => existing.id === id)) return;
-    followUps.push({ id, label: language === "th" ? labelTh : labelEn, prompt: language === "th" ? promptTh : promptEn });
+    const prompt = language === "th" ? promptTh : promptEn;
+    followUps.push({ id, label: prompt, prompt });
   };
 
   // The backend answered a scope-less metric question for its default window and
@@ -200,31 +203,31 @@ export function getGuidedActions(
     // shape ("วันนี้ขายได้กี่จาน"); baht metrics take "<metric><period>เท่าไหร่".
     const mk = (period: string) => (isQty ? `${period}ขายได้กี่จาน` : `${metric}${period}เท่าไหร่`);
     const en = isQty ? "dishes sold" : metric;
-    addFollowUp("fu-scope-today", "วันนี้", "Today", mk("วันนี้"), `${en} today`);
-    addFollowUp("fu-scope-month", "เดือนนี้", "This month", mk("เดือนนี้"), `${en} this month`);
-    addFollowUp("fu-scope-prev", "เดือนก่อน", "Last month", mk("เดือนที่แล้ว"), `${en} last month`);
+    addFollowUp("fu-scope-today", mk("วันนี้"), `${en} today`);
+    addFollowUp("fu-scope-month", mk("เดือนนี้"), `${en} this month`);
+    addFollowUp("fu-scope-prev", mk("เดือนที่แล้ว"), `${en} last month`);
   }
 
   if (has("sales-volume")) {
-    addFollowUp("fu-top-margin", "เมนูกำไรดีสุด", "Top-margin menu", "เมนูไหนกำไรดีสุด", "which menu has the highest margin");
-    addFollowUp("fu-slow", "เมนูขายไม่ออก", "Slow movers", "เมนูไหนขายไม่ออก", "which menus are not selling");
+    addFollowUp("fu-top-margin", "เมนูไหนกำไรดีสุด", "Which menu has the highest margin");
+    addFollowUp("fu-slow", "เมนูไหนขายไม่ออก", "Which menus are not selling");
   }
   if (has("sales")) {
-    addFollowUp("fu-trend", "เทียบสัปดาห์ก่อน", "vs last week", "ยอดขายเทียบกับสัปดาห์ก่อนเป็นยังไง", "how do sales compare to last week");
-    addFollowUp("fu-peak", "ช่วงไหนคนเยอะ", "Peak times", "ช่วงเวลาไหนขายดีที่สุด", "what are the peak hours");
+    addFollowUp("fu-trend", "ยอดขายสัปดาห์นี้เทียบสัปดาห์ที่แล้ว", "Sales this week vs last week");
+    addFollowUp("fu-peak", "ช่วงเวลาไหนคนเยอะที่สุด", "Which hours are busiest");
   }
   if (has("margin")) {
-    addFollowUp("fu-low-margin", "เมนูกำไรน้อยสุด", "Lowest-margin menu", "เมนูไหนกำไรน้อยสุด", "which menu has the lowest margin");
+    addFollowUp("fu-low-margin", "เมนูไหนกำไรน้อยสุด", "Which menu has the lowest margin");
   }
   // A generic menu question (e.g. a price / most-expensive answer) with no margin
   // or sales angle — nudge toward the two most useful next menu questions.
   if (has("menu") && !topics.has("margin") && !topics.has("sales-volume") && !topics.has("sales")) {
-    addFollowUp("fu-top-margin", "เมนูกำไรดีสุด", "Top-margin menu", "เมนูไหนกำไรดีสุด", "which menu has the highest margin");
-    addFollowUp("fu-best-selling", "เมนูขายดีสุด", "Best sellers", "เมนูไหนขายดีที่สุด", "which menu sells best");
+    addFollowUp("fu-top-margin", "เมนูไหนกำไรดีสุด", "Which menu has the highest margin");
+    addFollowUp("fu-best-selling", "เมนูไหนขายดีที่สุด", "Which menu sells best");
   }
   if (has("inventory")) {
-    addFollowUp("fu-reorder", "ควรสั่งของเมื่อไหร่", "When to reorder", "วัตถุดิบไหนควรสั่งเพิ่มและเมื่อไหร่", "which ingredients should I reorder and when");
-    addFollowUp("fu-dead", "ของค้างสต๊อก", "Dead stock", "มีวัตถุดิบค้างสต๊อกที่ไม่ได้ใช้ไหม", "is there any dead stock");
+    addFollowUp("fu-reorder", "วัตถุดิบไหนควรสั่งเพิ่ม", "Which ingredients should I reorder");
+    addFollowUp("fu-dead", "มีวัตถุดิบค้างสต๊อกไหม", "Is there any dead stock");
   }
 
   return [...followUps, ...actions].slice(0, 3);

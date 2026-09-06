@@ -462,7 +462,7 @@ export default function AISettingsModal({
             </Row>
           </Group>
           {trashOpen && (
-            <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+            <div className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
               {trash === null ? (
                 <p className="px-4 py-5 text-center text-[12px] text-gray-400">…</p>
               ) : trash.length === 0 ? (
