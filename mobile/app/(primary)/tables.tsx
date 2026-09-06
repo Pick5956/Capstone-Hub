@@ -12,7 +12,7 @@ import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader } f
 import { money, tableStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
-import { tableEntryAction } from '@/src/lib/table-workflow';
+import { canViewReservationHistory, tableEntryAction } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { breakpoints, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
@@ -27,6 +27,11 @@ export default function TablesScreen() {
   const { copy, language } = useDisplayPreferences();
   const canTakeOrder = can(activeMembership, 'take_order');
   const canManageTables = can(activeMembership, 'manage_table');
+  const canViewHistory = canViewReservationHistory(
+    can(activeMembership, 'view_tables'),
+    canManageTables,
+    canTakeOrder,
+  );
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
@@ -148,6 +153,7 @@ export default function TablesScreen() {
             <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ', 'Search tables')} />
           </View>
           {canTakeOrder ? <Button compact icon="calendar-outline" variant="secondary" label={copy('จองโต๊ะ', 'Reserve')} onPress={() => router.push('/table-reservation' as never)} /> : null}
+          {canViewHistory ? <Button compact icon="time-outline" variant="secondary" label={copy('ประวัติจอง', 'History')} onPress={() => router.push('/reservations' as never)} /> : null}
         </View>
         {zones.length > 1 ? (
           <ChipGroup
@@ -170,24 +176,28 @@ export default function TablesScreen() {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
-                  const ready = (order?.items || []).filter((item) => item.status === 'ready').reduce((sum, item) => sum + item.quantity, 0);
-                  const tone = ready ? 'success' : order ? 'warning' : table.status === 'reserved' ? 'info' : table.status === 'inactive' ? 'neutral' : 'success';
+                  // A table with an active order always reads as occupied (amber),
+                  // matching web POS. On the floor green means "free", so tinting a
+                  // busy table green misreads at a glance, which is the whole job of
+                  // this tile.
+                  const tone = order ? 'warning' : table.status === 'reserved' ? 'info' : table.status === 'inactive' ? 'neutral' : 'success';
                   const tint = statusTone(tone);
-                  const statusLabel = ready
-                    ? copy(`พร้อม ${ready.toLocaleString('th-TH')} รายการ`, `${ready.toLocaleString('en-US')} ready`)
-                    : order
-                      ? copy('กำลังใช้งาน', 'In use')
-                      : tableStatusLabel(table.status, language);
+                  const statusLabel = order
+                    ? copy('กำลังใช้งาน', 'In use')
+                    : tableStatusLabel(table.status, language);
                   return (
                     <Pressable
                       accessibilityLabel={copy(
-                        `โต๊ะ ${table.display_label || table.table_number}, ${ready ? `อาหารพร้อม ${ready.toLocaleString('th-TH')} รายการ` : order ? 'กำลังใช้งาน' : tableStatusLabel(table.status, language)}`,
-                        `Table ${table.display_label || table.table_number}, ${ready ? `${ready.toLocaleString('en-US')} items ready` : order ? 'in use' : tableStatusLabel(table.status, language)}`,
+                        `โต๊ะ ${table.display_label || table.table_number}, ${order ? 'กำลังใช้งาน' : tableStatusLabel(table.status, language)}`,
+                        `Table ${table.display_label || table.table_number}, ${order ? 'in use' : tableStatusLabel(table.status, language)}`,
                       )}
                       accessibilityRole="button"
                       key={table.ID}
                       onPress={() => open(table)}
-                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, minHeight: 148, flexGrow: 1, flexBasis: tabletWorkspace ? 176 : 150, gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
+                      // Phones get an exact two-column grid; tablets may grow to fill a
+                      // row but are capped, so one card left over on the last row keeps
+                      // the size of every other card instead of spanning the workspace.
+                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, maxWidth: tabletWorkspace ? 260 : undefined, minHeight: 148, flexGrow: tabletWorkspace ? 1 : 0, flexBasis: tabletWorkspace ? 176 : 'auto', gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                         <Text selectable numberOfLines={1} style={{ minWidth: 0, flex: 1, color: tint.color, fontSize: 23, fontWeight: '800', lineHeight: 30 }}>{table.display_label || table.table_number}</Text>

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -196,8 +197,21 @@ func (ctrl *RestaurantController) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"restaurant": restaurant})
 }
 
-// POST /api/v1/restaurants/:id/upload-logo
-func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
+// uploadRestaurantImage is the single path behind upload-logo, upload-cover and
+// upload-promptpay-qr.
+//
+// They used to be three copies of the same seventy lines, and the copies had
+// drifted: the PromptPay QR one — the endpoint that stores the image customers
+// scan to pay — had lost the tenant quota check, the cleanup of the file it had
+// just written when the database write failed, the removal of the image it
+// replaced, and respondAPIError, so it answered a failed update with the raw
+// driver error. One shared body is what stops that happening again; a protection
+// added here cannot be missing from one of the three.
+func (ctrl *RestaurantController) uploadRestaurantImage(
+	c *gin.Context,
+	previousImage func(*entity.Restaurant) string,
+	update func(restaurantID uint, publicPath string) (*entity.Restaurant, error),
+) {
 	userID, ok := contextUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -241,7 +255,10 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		return
 	}
 	fileName := hex.EncodeToString(random) + ext
-	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
+	tenant := strconv.FormatUint(uint64(restaurantID), 10)
+	relativeDir := filepath.Join("uploads", "restaurants", tenant)
+	// All three images share this directory, so an unmetered one would spend the
+	// budget the other two are checked against.
 	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
 		respondAPIError(c, http.StatusInsufficientStorage, err)
 		return
@@ -256,157 +273,37 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		return
 	}
 
-	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
-	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantLogo(restaurantID, publicPath)
+	publicPrefix := "/uploads/restaurants/" + tenant + "/"
+	restaurant, err := update(restaurantID, publicURL(c, publicPrefix+fileName))
 	if err != nil {
 		removeSavedUpload(destination)
 		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-	removeReplacedUpload(
-		existingRestaurant.Logo,
-		"/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/",
-		destination,
-	)
+	removeReplacedUpload(previousImage(existingRestaurant), publicPrefix, destination)
 
 	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
+}
+
+// POST /api/v1/restaurants/:id/upload-logo
+func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
+	ctrl.uploadRestaurantImage(c,
+		func(r *entity.Restaurant) string { return r.Logo },
+		ctrl.restaurantSvc.UpdateRestaurantLogo)
 }
 
 // POST /api/v1/restaurants/:id/upload-cover
 func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
-	userID, ok := contextUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
-
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
-		return
-	}
-	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
-		return
-	}
-	existingRestaurant, err := ctrl.restaurantSvc.GetRestaurant(restaurantID)
-	if err != nil {
-		respondAPIError(c, http.StatusNotFound, err)
-		return
-	}
-
-	file, err := c.FormFile("image")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
-		return
-	}
-	ext, err := validateImageUpload(file)
-	if err != nil {
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
-
-	random := make([]byte, 12)
-	if _, err := rand.Read(random); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
-		return
-	}
-	fileName := hex.EncodeToString(random) + ext
-	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
-	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
-		respondAPIError(c, http.StatusInsufficientStorage, err)
-		return
-	}
-	if err := os.MkdirAll(relativeDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
-		return
-	}
-	destination := filepath.Join(relativeDir, fileName)
-	if err := c.SaveUploadedFile(file, destination); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
-		return
-	}
-
-	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
-	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantCover(restaurantID, publicPath)
-	if err != nil {
-		removeSavedUpload(destination)
-		respondAPIError(c, http.StatusInternalServerError, err)
-		return
-	}
-	removeReplacedUpload(
-		existingRestaurant.CoverImage,
-		"/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/",
-		destination,
-	)
-
-	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
+	ctrl.uploadRestaurantImage(c,
+		func(r *entity.Restaurant) string { return r.CoverImage },
+		ctrl.restaurantSvc.UpdateRestaurantCover)
 }
 
 // POST /api/v1/restaurants/:id/upload-promptpay-qr
 func (ctrl *RestaurantController) UploadPromptPayQR(c *gin.Context) {
-	userID, ok := contextUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
-		return
-	}
-	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
-		return
-	}
-
-	file, err := c.FormFile("image")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
-		return
-	}
-	ext, err := validateImageUpload(file)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	random := make([]byte, 12)
-	if _, err := rand.Read(random); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
-		return
-	}
-	fileName := hex.EncodeToString(random) + ext
-	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
-	if err := os.MkdirAll(relativeDir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
-		return
-	}
-	destination := filepath.Join(relativeDir, fileName)
-	if err := c.SaveUploadedFile(file, destination); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
-		return
-	}
-
-	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
-	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantPromptPayQR(restaurantID, publicPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
+	ctrl.uploadRestaurantImage(c,
+		func(r *entity.Restaurant) string { return r.PromptPayQRImage },
+		ctrl.restaurantSvc.UpdateRestaurantPromptPayQR)
 }
 
 // GET /api/v1/restaurants/:id/members

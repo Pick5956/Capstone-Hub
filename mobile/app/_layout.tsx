@@ -10,12 +10,14 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TabletWorkspaceFrame } from '@/src/components/app-shell';
 import { AuthProvider } from '@/src/providers/auth-provider';
+import { PrinterProvider } from '@/src/providers/printer-provider';
+import { ToastProvider } from '@/src/providers/toast-provider';
 import {
   DisplayPreferencesProvider,
   useDisplayPreferences,
 } from '@/src/providers/display-preferences-provider';
 import { APP_FONT_FAMILIES } from '@/src/lib/app-font';
-import { shouldLockPortrait } from '@/src/lib/orientation-lock';
+import { orientationLockFor } from '@/src/lib/orientation-lock';
 import { colors } from '@/src/theme';
 
 export {
@@ -46,29 +48,41 @@ function TabletWorkspaceStackLayout({ children }: { children: ReactNode }) {
   return <TabletWorkspaceFrame>{children}</TabletWorkspaceFrame>;
 }
 
-// Pin phones to upright portrait and leave tablets free to rotate, so the POS
-// still works on a tablet stand. The effect keys off the boolean rather than the
-// raw dimensions, so rotating a tablet does not churn lock/unlock calls.
-function usePortraitLockOnPhones() {
+// Pin phones to upright portrait and tablets to landscape, so the POS, kitchen
+// board and table grid always get the shape they were designed for. The effect
+// keys off the resolved mode rather than the raw dimensions, so turning a device
+// does not churn lock calls - the mode is derived from the smallest side, which
+// rotation never changes.
+//
+// LANDSCAPE (not LANDSCAPE_LEFT) keeps both sideways positions, so a tablet can
+// be flipped either way on its stand without the home button ending up wherever
+// the cable is not.
+//
+// iPad caveat: iOS ignores orientation locks while an app supports Slide Over /
+// Split View, so this only takes effect with ios.requireFullScreen set in
+// app.json - and never inside Expo Go, which ships its own Info.plist.
+function useOrientationLock() {
   const { width, height } = useWindowDimensions();
-  const lockPortrait = shouldLockPortrait({ width, height });
+  const mode = orientationLockFor({ width, height });
 
   useEffect(() => {
     // react-native-web has no equivalent lock and throws on desktop browsers.
     if (Platform.OS === 'web') return;
+    // Dimensions are not readable yet; leave whatever the system is doing.
+    if (!mode) return;
 
     void (async () => {
       try {
-        if (lockPortrait) {
-          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        } else {
-          await ScreenOrientation.unlockAsync();
-        }
+        await ScreenOrientation.lockAsync(
+          mode === 'portrait'
+            ? ScreenOrientation.OrientationLock.PORTRAIT_UP
+            : ScreenOrientation.OrientationLock.LANDSCAPE,
+        );
       } catch {
         // Orientation control is a nicety - never let it break startup.
       }
     })();
-  }, [lockPortrait]);
+  }, [mode]);
 }
 
 function AppNavigator() {
@@ -85,52 +99,62 @@ function AppNavigator() {
 
   return (
     <AuthProvider>
-      <Stack
-        layout={TabletWorkspaceStackLayout}
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          gestureEnabled: true,
-          presentation: 'card',
-          contentStyle: { backgroundColor: colors.surface },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="restaurants" />
-        <Stack.Screen name="create-restaurant" />
-        <Stack.Screen name="invite/manual" />
-        <Stack.Screen name="invite/[token]" />
-        <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
-        <Stack.Screen name="reservations" />
-        <Stack.Screen name="table-reservation" />
-        <Stack.Screen name="table-management" />
-        <Stack.Screen name="table-management/table" />
-        <Stack.Screen name="table-management/zones" />
-        <Stack.Screen name="table-management/tags" />
-        <Stack.Screen name="order/[id]" />
-        <Stack.Screen name="order/new" />
-        <Stack.Screen name="menu" />
-        <Stack.Screen name="staff" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="inventory" />
-        <Stack.Screen name="reports" />
-        <Stack.Screen name="ai-assistant" />
-      </Stack>
+      <PrinterProvider>
+        <Stack
+          layout={TabletWorkspaceStackLayout}
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_right',
+            gestureEnabled: true,
+            presentation: 'card',
+            contentStyle: { backgroundColor: colors.surface },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="restaurants" />
+          <Stack.Screen name="create-restaurant" />
+          <Stack.Screen name="invite/manual" />
+          <Stack.Screen name="invite/[token]" />
+          <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
+          {/*
+            Reservation history is reached from the table screens, the way the
+            web opens it as a modal over /pos/tables and /tables, rather than
+            from a menu entry of its own.
+          */}
+          <Stack.Screen name="reservations" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="table-reservation" />
+          <Stack.Screen name="table-management" />
+          <Stack.Screen name="table-management/table" />
+          <Stack.Screen name="table-management/zones" />
+          <Stack.Screen name="table-management/tags" />
+          <Stack.Screen name="order/[id]" />
+          <Stack.Screen name="order/new" />
+          <Stack.Screen name="menu" />
+          <Stack.Screen name="staff" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="settings/printer" />
+          <Stack.Screen name="inventory" />
+          <Stack.Screen name="reports" />
+          <Stack.Screen name="ai-assistant" />
+        </Stack>
+      </PrinterProvider>
     </AuthProvider>
   );
 }
 
 export default function RootLayout() {
-  usePortraitLockOnPhones();
+  useOrientationLock();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <StatusBar style="dark" backgroundColor={colors.surface} />
       <SafeAreaProvider>
         <DisplayPreferencesProvider>
-          <AppNavigator />
+          <ToastProvider>
+            <AppNavigator />
+          </ToastProvider>
         </DisplayPreferencesProvider>
       </SafeAreaProvider>
     </View>

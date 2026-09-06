@@ -73,7 +73,7 @@ function Field({
         {required ? <span className="ml-1 text-orange-600 dark:text-orange-400">*</span> : null}
       </span>
       <input
-        className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:bg-gray-50 disabled:text-gray-500 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:disabled:bg-gray-900/60 dark:disabled:text-gray-500 ${
+        className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-500 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:disabled:bg-gray-900/60 dark:disabled:text-gray-500 ${
           error ? "border-red-300 dark:border-red-900/60" : "border-gray-300 dark:border-gray-700"
         }`}
         type={type}
@@ -110,7 +110,7 @@ function TextAreaField({
     <label className="block space-y-2">
       <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</span>
       <textarea
-        className={`min-h-24 w-full resize-y rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 ${
+        className={`min-h-24 w-full resize-y rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 ${
           error ? "border-red-300 dark:border-red-900/60" : "border-gray-300 dark:border-gray-700"
         }`}
         value={value}

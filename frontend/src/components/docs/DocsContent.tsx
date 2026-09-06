@@ -92,7 +92,7 @@ function ArticleSection({
               {language === "th" ? "ข้อควรรู้เพิ่มเติม" : "Additional notes"}
               <ChevronDown className="ml-auto h-4 w-4 text-gray-500 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
             </summary>
-            <ul className="border-t border-gray-200 px-4 py-3 pl-9 text-[14px] leading-7 text-gray-700 dark:border-gray-800 dark:text-gray-300">
+            <ul className="border-t border-gray-200 px-4 py-3 pl-7 text-[14px] leading-7 text-gray-700 dark:border-gray-800 dark:text-gray-300">
               {section.bullets.map((bullet, index) => (
                 <li key={`${anchor}-bullet-${index}`} className="list-disc pl-1 marker:text-gray-500 dark:marker:text-gray-600">
                   {localized(bullet, language)}

@@ -265,10 +265,6 @@ func (s *RestaurantService) GetMembership(userID, restaurantID uint) (*entity.Re
 	return member, nil
 }
 
-func (s *RestaurantService) ListMembers(restaurantID uint) ([]entity.RestaurantMember, error) {
-	return s.ListMembersWithStatus(restaurantID, false)
-}
-
 func (s *RestaurantService) ListMembersForActor(actorUserID, restaurantID uint) ([]entity.RestaurantMember, error) {
 	actor, err := s.GetMembership(actorUserID, restaurantID)
 	if err != nil {

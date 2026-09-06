@@ -81,12 +81,43 @@ export interface MenuOption {
   is_default: boolean;
   display_order: number;
   is_active: boolean;
+  ingredients?: MenuOptionIngredient[];
 }
+
+/**
+ * What picking this option does to the dish's ingredient use. `direction` carries
+ * the sign so `quantity` is always positive - the backend stores it that way
+ * because every quantity in the schema is checked `> 0` and a sign lost in a JSON
+ * round trip would turn "use less" into "use more".
+ */
+export interface MenuOptionIngredient {
+  ID: number;
+  restaurant_id: number;
+  menu_item_id: number;
+  option_group_id: number;
+  menu_option_id: number;
+  ingredient_id: number;
+  direction: MenuOptionIngredientDirection;
+  quantity: number;
+  unit: string;
+  ingredient?: {
+    ID: number;
+    name: string;
+    unit: string;
+    stock: number;
+    cost_per_unit: number;
+  };
+}
+
+export type MenuOptionIngredientDirection = "add" | "remove";
 
 export interface CategoryInput {
   name: string;
   display_order: number;
-  is_active: boolean;
+  /** Optional on the API (`*bool` server-side): omit it and the stored value is
+   *  left alone. Send it only when you mean to change whether the category is
+   *  shown - passing `true` on a rename used to silently un-hide it. */
+  is_active?: boolean;
 }
 
 export interface MenuItemInput {
@@ -125,4 +156,12 @@ export interface MenuOptionInput {
   is_default: boolean;
   display_order: number;
   is_active: boolean;
+  ingredients?: MenuOptionIngredientInput[];
+}
+
+export interface MenuOptionIngredientInput {
+  ingredient_id: number;
+  direction: MenuOptionIngredientDirection;
+  quantity: number;
+  unit?: string;
 }

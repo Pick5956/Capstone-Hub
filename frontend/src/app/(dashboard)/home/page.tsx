@@ -424,7 +424,7 @@ type CardSummaryItem = { key: string; label: string; value: string; valueClass?:
 // partition it opens in that lane's colour.
 // A pip: the thing itself, and a smaller footnote under it — a table and the
 // tail of the order sitting on it.
-type CardChip = { text: string; note?: string };
+type CardChip = { text: string; note?: string; tone?: string };
 type CardRow = CardSummaryItem & { heading?: boolean; tint?: string; chips?: CardChip[] };
 
 // One width for every pip in a row, set by the longest line any of them
@@ -586,7 +586,12 @@ function CollapsibleCard({
             style={{ containerType: "inline-size" }}
             className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden"
           >
-            {groupCardRows(rows).map((block) => (
+            {groupCardRows(rows).map((block) => {
+              // A block whose head is not a heading (e.g. the floor-status card,
+              // which shows every table as one grid) renders its head as content
+              // and skips the topic bar entirely.
+              const contentRows = block.head.heading ? block.items : [block.head, ...block.items];
+              return (
               <div
                 key={block.head.key}
                 // `flex-auto`: the lane's own rows set its starting height and
@@ -595,6 +600,7 @@ function CollapsibleCard({
                 // that it scrolls inside itself.
                 className="flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden rounded-lg bg-white dark:bg-gray-800"
               >
+                {block.head.heading ? (
                 <div
                   style={{ fontSize: rowTopicText }}
                   className={`flex items-baseline gap-1.5 border-b border-gray-200 bg-gray-50 px-2 py-0.5 leading-tight dark:border-gray-800 dark:bg-gray-700 ${block.head.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
@@ -602,11 +608,12 @@ function CollapsibleCard({
                   <span className="truncate font-bold uppercase tracking-wide">{block.head.label}</span>
                   <span className="ml-auto shrink-0 font-mono font-bold tabular-nums">{block.head.value}</span>
                 </div>
+                ) : null}
                 {/* The lane's own scroller: a state with a dozen free tables
                     lists them all, and the block stays the height of its
                     neighbours instead of clipping the tail off. */}
                 <div className="scroll-minimal min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-hidden dark:divide-gray-800">
-                  {block.items.map((item) => item.chips ? (
+                  {contentRows.map((item) => item.chips ? (
                     // A lane whose tables carry no clock shows them as pips
                     // rather than one line each: the whole set fits the block,
                     // and the count above it is something you can eyeball.
@@ -624,7 +631,7 @@ function CollapsibleCard({
                           // the position is what tells them apart.
                           key={`${chip.text}-${chip.note ?? ""}-${index}`}
                           style={{ minWidth: item.key.endsWith("-none") ? `calc(2ch + 0.75rem)` : chipWidth(item.chips) }}
-                          className={`inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-current/30 bg-current/10 px-1.5 py-1 font-mono ${item.key.endsWith("-none") ? "aspect-square" : ""} ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
+                          className={`inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-current/30 bg-current/10 px-1.5 py-1 font-mono ${item.key.endsWith("-none") ? "aspect-square" : ""} ${chip.tone ?? item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
                         >
                           <span className="max-w-full truncate">{chip.text}</span>
                           {chip.note ? <span className="max-w-full truncate text-[0.68em] opacity-70">{chip.note}</span> : null}
@@ -644,7 +651,8 @@ function CollapsibleCard({
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : summary?.length ? (
           // Two by two filling whatever height is left, the same way the
@@ -1583,28 +1591,28 @@ export default function Home() {
     { key: "reserved", label: copy.reserved, value: reservedTables.length.toLocaleString() },
   ];
 
-  // Same face as the kitchen card: every state, always, with its count, and
-  // every table in it as a pip — its name, and the party sitting on it where
-  // there is one. Occupied leads with the table that has been sitting longest,
-  // the one a host should look at first.
-  const floorRows: CardRow[] = [
-    { key: "occupied", label: copy.occupied, items: occupied, color: "text-amber-600 dark:text-amber-300", tint: rowTint.amber },
-    { key: "reserved", label: copy.reserved, items: reservedTables, color: "text-sky-600 dark:text-sky-300", tint: rowTint.sky },
-    { key: "available", label: copy.available, items: availableTables, color: "text-emerald-600 dark:text-emerald-300", tint: rowTint.emerald },
-  ].flatMap((lane) => [
-    { key: `${lane.key}-head`, label: lane.label, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
-    ...(lane.items.length
-      ? [{
-          key: `${lane.key}-chips`,
-          label: "",
-          value: "",
-          valueClass: lane.color,
-          chips: [...lane.items]
-            .sort((a, b) => (b.minutes ?? -1) - (a.minutes ?? -1))
-            .map((table) => ({ text: table.label, note: table.guests ? `${table.guests}p` : table.seats ? `${table.seats}s` : undefined })),
-        }]
-      : [emptyRow(lane.key)]),
-  ]);
+  // One grid, not three: every table (bar the inactive ones) as a pip in table
+  // order, each carrying its status word and coloured by it — amber occupied,
+  // sky reserved, emerald free — so the border reads the state at a glance. No
+  // per-status headings; the card title already says this is the floor.
+  const tableTone = (status: DashboardFloorTable["status"]) =>
+    status === "occupied" ? "text-amber-600 dark:text-amber-300"
+      : status === "reserved" ? "text-sky-600 dark:text-sky-300"
+        : status === "available" ? "text-emerald-600 dark:text-emerald-300"
+          : "text-gray-500 dark:text-gray-400";
+  const floorTables = tables.filter((table) => table.status !== "inactive");
+  const floorRows: CardRow[] = floorTables.length
+    ? [{
+        key: "floor-all",
+        label: "",
+        value: "",
+        chips: floorTables.map((table) => ({
+          text: table.label,
+          note: copy[table.status],
+          tone: tableTone(table.status),
+        })),
+      }]
+    : [emptyRow("floor")];
 
   // While a card is open, every other card shrinks from a full tile down to
   // just its folder tab.
@@ -1656,7 +1664,7 @@ export default function Home() {
             {/* The native input drives the value but renders the browser's own
                 numeric format, so it sits transparent on top and the readable
                 weekday/date is drawn underneath it. */}
-            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-800">
+            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 dark:hover:bg-gray-800">
               <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
               <span className="sr-only">{copy.chooseDate}</span>
               {/* Fixed width: the label is a long weekday and month name, so

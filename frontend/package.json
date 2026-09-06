@@ -8,6 +8,7 @@
     "build:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-public.ps1",
     "start:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-public.ps1",
     "tunnel:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/start-dishy-tunnel.ps1",
+    "deploy:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/deploy-public.ps1",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint",

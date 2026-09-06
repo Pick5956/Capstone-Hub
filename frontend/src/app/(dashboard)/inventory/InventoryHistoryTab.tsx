@@ -222,7 +222,7 @@ export default function InventoryHistoryTab({
             placeholder={copy.searchPlaceholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className={`${inputCls} !h-9 pl-10 pr-3`}
+            className={`${inputCls} !h-9 pl-7 pr-3`}
           />
         </div>
 
@@ -246,6 +246,7 @@ export default function InventoryHistoryTab({
         </div>
 
         <ThemedSelect
+          aria-label={copy.type}
           compact
           className="w-32"
           value={type}
@@ -254,6 +255,7 @@ export default function InventoryHistoryTab({
         />
 
         <ThemedSelect
+          aria-label={copy.allCategories}
           compact
           className="w-40"
           value={String(categoryId)}

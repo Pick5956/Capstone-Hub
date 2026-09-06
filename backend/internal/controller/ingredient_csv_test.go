@@ -170,3 +170,58 @@ func TestExportFilenameNamesThePickedRange(t *testing.T) {
 		t.Fatalf("csvDateRangeSuffix() = %q, want the day the user picked, not the exclusive bound", got)
 	}
 }
+
+// Excel decides what a cell is *after* stripping the CSV quoting, so quoting
+// alone does not stop a formula. An ingredient name is free text typed by any
+// member with manage_inventory, and the owner is the one who opens the export.
+func TestCSVDownloadNeutralisesFormulaCells(t *testing.T) {
+	context, recorder := csvExportContext(t, "")
+
+	attack := `=HYPERLINK("https://evil.example/x","à¸£à¸²à¸à¸²à¸à¹à¸à¸à¸¸à¸")`
+	writeCSVDownload(context, "x.csv", []string{"name"}, [][]string{{attack}}, 1)
+
+	records := readExportedCSV(t, recorder.Body.String())
+	if records[1][0] != "'"+attack {
+		t.Fatalf("a formula cell must be prefixed so Excel reads it as text: %q", records[1][0])
+	}
+}
+
+func TestCSVDownloadEscapesEveryFormulaLeadIn(t *testing.T) {
+	for _, leadIn := range []string{"=", "+", "-", "@", "\t", "\r"} {
+		cell := leadIn + "cmd|' /c calc'!A0"
+		if got := csvSafeCell(cell); got != "'"+cell {
+			t.Fatalf("lead-in %q was not escaped: %q", leadIn, got)
+		}
+	}
+}
+
+// The guard must not reach the numbers. Every stock-out prints a negative
+// Change, so escaping on the '-' alone would ship a real column as text and the
+// sheet would stop summing it.
+func TestCSVSafeCellLeavesGeneratedNumbersAlone(t *testing.T) {
+	for _, value := range []string{csvNumber(-0.6), csvNumber(5), csvMoney(1250), csvMoney(0), "-0.6", "0"} {
+		if got := csvSafeCell(value); got != value {
+			t.Fatalf("number %q must survive unescaped, got %q", value, got)
+		}
+	}
+	if got := csvSafeCell(""); got != "" {
+		t.Fatalf("empty cell must stay empty, got %q", got)
+	}
+	if got := csvSafeCell("à¸«à¸¡à¸¹à¸ªà¸±à¸"); got != "à¸«à¸¡à¸¹à¸ªà¸±à¸" {
+		t.Fatalf("ordinary text must not be touched, got %q", got)
+	}
+}
+
+func readExportedCSV(t *testing.T, body string) [][]string {
+	t.Helper()
+	reader := csv.NewReader(strings.NewReader(strings.TrimPrefix(body, utf8BOM)))
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		t.Fatalf("exported CSV must parse back: %v", err)
+	}
+	if len(records) < 2 {
+		t.Fatalf("expected a header and at least one row, got %#v", records)
+	}
+	return records
+}

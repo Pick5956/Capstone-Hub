@@ -5,9 +5,8 @@ import { createCategory, deleteCategory, listCategories, updateCategory } from '
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { Button, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
-import { categoryActiveToggleInput } from '@/src/lib/menu-editor';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -24,11 +23,9 @@ export default function MenuCategoriesScreen() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState('');
   const [order, setOrder] = useState('1');
-  const [active, setActive] = useState<'yes' | 'no'>('yes');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [updatingCategoryId, setUpdatingCategoryId] = useState<number | null>(null);
 
   const load = async () => {
     try {
@@ -47,7 +44,6 @@ export default function MenuCategoriesScreen() {
     setEditing(item || null);
     setName(item?.name || '');
     setOrder(String(item?.display_order ?? categories.length + 1));
-    setActive(item?.is_active === false ? 'no' : 'yes');
     setConfirmDelete(false);
   }
 
@@ -56,9 +52,9 @@ export default function MenuCategoriesScreen() {
     setSaving(true);
     setError(null);
     try {
-      const payload = { name: name.trim(), display_order: toInt(order, 0), is_active: active === 'yes' };
+      const payload = { name: name.trim(), display_order: toInt(order, 0) };
       if (editing) await updateCategory(editing.ID, payload);
-      else await createCategory(payload);
+      else await createCategory({ ...payload, is_active: true });
       choose();
       await load();
     } catch (err) {
@@ -87,22 +83,6 @@ export default function MenuCategoriesScreen() {
     }
   }
 
-  async function toggleActive(item: Category) {
-    setUpdatingCategoryId(item.ID);
-    setError(null);
-    try {
-      const updated = await updateCategory(item.ID, categoryActiveToggleInput(item));
-      setCategories((current) => current.map((category) => category.ID === updated.ID ? updated : category));
-      if (editing?.ID === updated.ID) {
-        setEditing(updated);
-        setActive(updated.is_active ? 'yes' : 'no');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : copy('เปลี่ยนสถานะหมวดไม่สำเร็จ', 'Could not update the category status'));
-    } finally {
-      setUpdatingCategoryId(null);
-    }
-  }
 
   if (!canManage) {
     return (
@@ -126,15 +106,6 @@ export default function MenuCategoriesScreen() {
       />
       <TextField icon="folder-outline" label={copy('ชื่อหมวด', 'Category name')} value={name} onChangeText={setName} />
       <TextField icon="reorder-three-outline" label={copy('ลำดับ', 'Display order')} value={order} onChangeText={setOrder} keyboardType="number-pad" />
-      <ChipGroup
-        label={copy('สถานะ', 'Status')}
-        value={active}
-        onChange={setActive}
-        options={[
-          { label: copy('เปิดใช้งาน', 'Active'), value: 'yes' },
-          { label: copy('ปิดใช้งาน', 'Inactive'), value: 'no' },
-        ]}
-      />
       <Button
         icon="checkmark-outline"
         label={editing ? copy('บันทึกหมวด', 'Save category') : copy('เพิ่มหมวด', 'Add category')}
@@ -186,20 +157,10 @@ export default function MenuCategoriesScreen() {
                 <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
                   {copy(`ลำดับ ${item.display_order.toLocaleString('th-TH')}`, `Order ${item.display_order.toLocaleString('en-US')}`)}
                 </Text>
-                <StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />
               </View>
             </View>
             <View style={{ gap: spacing.sm }}>
               <Button compact icon="create-outline" variant="secondary" label={copy('แก้ไข', 'Edit')} onPress={() => choose(item)} />
-              <Button
-                compact
-                icon={item.is_active ? 'eye-off-outline' : 'eye-outline'}
-                variant="ghost"
-                label={item.is_active ? copy('ปิด', 'Hide') : copy('เปิด', 'Show')}
-                onPress={() => void toggleActive(item)}
-                loading={updatingCategoryId === item.ID}
-                disabled={updatingCategoryId !== null && updatingCategoryId !== item.ID}
-              />
             </View>
           </View>
         </View>
@@ -224,18 +185,8 @@ export default function MenuCategoriesScreen() {
             title={item.name}
             trailing={(
               <View style={{ alignItems: 'flex-end', gap: spacing.sm }}>
-                <StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />
                 <View style={{ flexDirection: 'row', gap: spacing.xs }}>
                   <Button compact icon="create-outline" variant="secondary" label={copy('แก้ไข', 'Edit')} onPress={() => choose(item)} />
-                  <Button
-                    compact
-                    icon={item.is_active ? 'eye-off-outline' : 'eye-outline'}
-                    variant="ghost"
-                    label={item.is_active ? copy('ปิด', 'Hide') : copy('เปิด', 'Show')}
-                    onPress={() => void toggleActive(item)}
-                    loading={updatingCategoryId === item.ID}
-                    disabled={updatingCategoryId !== null && updatingCategoryId !== item.ID}
-                  />
                 </View>
               </View>
             )}

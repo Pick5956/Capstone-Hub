@@ -460,7 +460,7 @@ export default function DocsShell({ children }: { children: ReactNode }) {
                         <Link
                           href={href}
                           onClick={() => navigateFromSearch(article, section)}
-                          className="group flex min-h-16 items-start gap-3 rounded-md px-3 py-3 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 dark:hover:bg-gray-900 dark:focus-visible:bg-gray-900"
+                          className="group flex min-h-16 items-start gap-3 rounded-md px-3 py-3 hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none dark:hover:bg-gray-900 dark:focus-visible:bg-gray-900"
                         >
                           <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
                             <BookOpen className="h-4 w-4" aria-hidden="true" />

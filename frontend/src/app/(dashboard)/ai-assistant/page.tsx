@@ -979,7 +979,7 @@ export default function AIAssistantPage() {
               className={`flex flex-col gap-1 rounded-[1.75rem] border p-2 shadow-sm transition ${
                 voiceListening
                   ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
-                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-800"
+                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 dark:border-gray-800 dark:bg-gray-800"
               }`}
             >
               {voiceListening ? (

@@ -689,18 +689,18 @@ export default function TablesPage() {
             <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
               {hasAnyZone && (
                 <div className="w-full sm:w-52">
-                  <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
+                  <ThemedSelect triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]" aria-label={copy.allZones} value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
                 </div>
               )}
               <div className="w-full sm:w-52">
-                <ThemedSelect value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
+                <ThemedSelect triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]" aria-label={copy.allTags} value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
               </div>
             </div>
             {canManage ? (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>
-                <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>
-                <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>
+                <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>
+                <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>
+                <button type="button" onClick={startCreateTable} className="h-9 rounded-xl bg-orange-700 px-3 text-[12px] font-semibold text-white shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>
               </div>
             ) : null}
           </div>
@@ -798,12 +798,12 @@ export default function TablesPage() {
                       {!editingTable && (
                         <label className="block">
                           <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.count}</span>
-                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.count} />
+                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.count} />
                         </label>
                       )}
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.capacity}</span>
-                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.capacity} />
+                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.capacity} />
                       </label>
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.status}</span>
@@ -1042,7 +1042,7 @@ function ManagerRow({
       aria-pressed={selected}
       onClick={onToggle}
       onKeyDown={handleKeyDown}
-      className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
+      className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] ${
         selected
           ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"

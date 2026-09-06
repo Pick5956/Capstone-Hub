@@ -11,10 +11,8 @@ import {
 
 import {
   DEFAULT_DISPLAY_PREFERENCES,
-  textSizeMultiplier,
   type DisplayLanguage,
   type DisplayPreferences,
-  type DisplayTextSize,
 } from '@/src/lib/display-preferences';
 import {
   getDisplayPreferences,
@@ -23,10 +21,8 @@ import {
 
 interface DisplayPreferencesContextValue extends DisplayPreferences {
   ready: boolean;
-  fontScale: number;
   persistenceStatus: 'loading' | 'saving' | 'saved' | 'memory-only';
   setLanguage: (language: DisplayLanguage) => void;
-  setTextSize: (textSize: DisplayTextSize) => void;
   copy: (thai: string, english: string) => string;
 }
 
@@ -91,25 +87,16 @@ export function DisplayPreferencesProvider({
     [preferences, update],
   );
 
-  const setTextSize = useCallback(
-    (textSize: DisplayTextSize) => {
-      update({ ...preferences, textSize });
-    },
-    [preferences, update],
-  );
-
   const value = useMemo<DisplayPreferencesContextValue>(
     () => ({
       ...preferences,
       ready,
-      fontScale: textSizeMultiplier(preferences.textSize),
       persistenceStatus,
       setLanguage,
-      setTextSize,
       copy: (thai, english) =>
         preferences.language === 'th' ? thai : english,
     }),
-    [persistenceStatus, preferences, ready, setLanguage, setTextSize],
+    [persistenceStatus, preferences, ready, setLanguage],
   );
 
   return (

@@ -31,6 +31,9 @@ export default function ThemedSelect({
   className = "",
   placeholder = "เลือก",
   compact = false,
+ triggerClassName = "",
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -40,6 +43,17 @@ export default function ThemedSelect({
   placeholder?: string;
   // compact matches the h-9 action buttons; the default h-10 stays the app-wide size.
   compact?: boolean;
+ // Appended to the trigger button, for callers that need to change its own box -
+ // radius or shadow. className styles the wrapper, which cannot reach the button
+ // it draws behind, so a shadow set there would sit on a differently-rounded shape.
+ triggerClassName?: string;
+  // The trigger is a button, not a native select, so it has no implicit name.
+  // Call sites were already passing aria-label and TypeScript let it through -
+  // JSX skips prop checking for hyphenated attributes - so it silently reached
+  // nothing and those dropdowns were announced as an unlabelled button. Declared
+  // here and forwarded below.
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 }) {
   const { language } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -205,11 +219,13 @@ export default function ThemedSelect({
             closeMenu();
           }
         }}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={renderMenu ? listboxId : undefined}
         aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
-        className={`${compact ? "h-9 text-[12px]" : "h-10 text-[13px]"} w-full rounded-md border px-3 pr-9 text-left text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] active:translate-y-px focus-visible:border-orange-500 focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState}`}
+        className={`${compact ? "h-9 text-[12px]" : "h-10 text-[13px]"} w-full rounded-md border px-3 pr-9 text-left text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] focus-visible:border-orange-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState} ${triggerClassName}`}
       >
         <span className={`${selected ? "" : "text-gray-500 dark:text-gray-400"} block truncate`}>
           {selected?.label ?? (placeholder || fallbackPlaceholder)}
@@ -234,7 +250,7 @@ export default function ThemedSelect({
             id={listboxId}
             role="listbox"
             aria-labelledby={buttonId}
-            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[color:var(--dashboard-shell-border)] bg-white p-1.5 shadow-lg dark:bg-gray-900 dark:shadow-black/30`}
+            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white p-1.5 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:bg-gray-900 dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]`}
             style={{
               left: menuPosition.left,
               top: menuPosition.top,

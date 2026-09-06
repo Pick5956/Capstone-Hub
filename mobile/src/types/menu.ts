@@ -9,7 +9,9 @@ export interface Category {
 export interface CategoryInput {
   name: string;
   display_order: number;
-  is_active: boolean;
+  /** Optional on the API (`*bool` server-side): omit it and the stored value is
+   *  left alone. Send it only when creating, where the category starts active. */
+  is_active?: boolean;
 }
 
 export interface MenuItem {
@@ -70,6 +72,7 @@ export interface MenuOption {
   is_default: boolean;
   display_order: number;
   is_active: boolean;
+  ingredients?: MenuOptionIngredient[];
 }
 
 export interface MenuIngredientInput {
@@ -85,6 +88,31 @@ export interface MenuOptionInput {
   is_default: boolean;
   display_order: number;
   is_active: boolean;
+  /**
+   * Set on the web menu editor only. It is declared here because a save posts the
+   * whole option aggregate and the backend replaces it, so a mobile edit that
+   * dropped this field would delete every ingredient link on the dish.
+   */
+  ingredients?: MenuOptionIngredientInput[];
+}
+
+export interface MenuOptionIngredientInput {
+  ingredient_id: number;
+  direction: 'add' | 'remove';
+  quantity: number;
+  unit?: string;
+}
+
+export interface MenuOptionIngredient {
+  ID: number;
+  restaurant_id: number;
+  menu_item_id: number;
+  option_group_id: number;
+  menu_option_id: number;
+  ingredient_id: number;
+  direction: 'add' | 'remove';
+  quantity: number;
+  unit: string;
 }
 
 export interface MenuOptionGroupInput {

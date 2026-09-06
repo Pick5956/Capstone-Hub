@@ -19,6 +19,7 @@ import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import ReservationHistoryModal from "@/src/components/tables/ReservationHistoryModal";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
@@ -261,14 +262,15 @@ export default function PosTablesPage() {
     list.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length;
 
   const allZonesLabel = language === "th" ? "ทุกโซน" : "All zones";
+  const zoneSelectOptions = useMemo(
+    () => [
+      { value: "all", label: `${allZonesLabel} (${tables.length})` },
+      ...zoneOptions.map((zone) => ({ value: zone.key, label: `${zone.label} (${zone.count})` })),
+    ],
+    [allZonesLabel, tables.length, zoneOptions],
+  );
   const zoneCountLabel = (free: number, total: number) =>
     language === "th" ? `ว่าง ${free} จาก ${total} โต๊ะ` : `${free} of ${total} free`;
-  const chipClass = (on: boolean) =>
-    `ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
-      on
-        ? "border-orange-700 bg-orange-700 text-white"
-        : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200"
-    }`;
 
   const load = useCallback(async (showLoading = true) => {
     if (!canTake) return;
@@ -551,7 +553,7 @@ export default function PosTablesPage() {
       <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <h1 className="sr-only">{copy.eyebrow}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
-          <div className="mx-auto grid w-full max-w-7xl gap-1.5 lg:flex lg:items-center lg:gap-2">
+          <div className="grid w-full gap-1.5 lg:flex lg:items-center lg:gap-2">
             <label className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <input
@@ -559,7 +561,7 @@ export default function PosTablesPage() {
                 onChange={(event) => setSearch(event.target.value)}
                 disabled={isNavigating}
                 placeholder={copy.search}
-                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-7 pr-3 text-[15px] outline-none focus:border-orange-500 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] placeholder:text-[15px] dark:bg-gray-800"
                 aria-label={copy.search}
               />
             </label>
@@ -567,7 +569,7 @@ export default function PosTablesPage() {
               <button
                 type="button"
                 onClick={() => setReservationsOpen(true)}
-                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
               >
                 <CalendarClock className="h-4 w-4" />
                 {copy.reservationHistory}
@@ -576,24 +578,21 @@ export default function PosTablesPage() {
                 type="button"
                 disabled={isNavigating}
                 onClick={openTakeawaySheet}
-                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
               >
                 <ShoppingBag className="h-4 w-4" />
                 {copy.takeaway}
               </button>
             </div>
             {hasAnyZone && (
-              <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
-                <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
-                  {allZonesLabel}
-                  <span className="font-mono tabular-nums opacity-70">{tables.length}</span>
-                </button>
-                {zoneOptions.map((zone) => (
-                  <button key={zone.key} type="button" onClick={() => setZoneFilter(zone.key)} className={chipClass(zoneFilter === zone.key)}>
-                    <span className="truncate">{zone.label}</span>
-                    <span className="font-mono tabular-nums opacity-70">{zone.count}</span>
-                  </button>
-                ))}
+              <div className="w-full min-w-0 sm:w-44">
+                <ThemedSelect
+                  value={zoneFilter}
+                  onChange={setZoneFilter}
+                  options={zoneSelectOptions}
+                  aria-label={allZonesLabel}
+ triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]"
+                />
               </div>
             )}
           </div>
@@ -607,7 +606,7 @@ export default function PosTablesPage() {
         showHeader={false}
       >
 
-      <div className="mx-auto w-full max-w-7xl">
+      <div className="w-full">
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {loading || isNavigating ? (
@@ -753,7 +752,7 @@ export default function PosTablesPage() {
                           value={customerName}
                           onChange={(event) => setCustomerName(event.target.value)}
                           placeholder={copy.customerNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="block">
@@ -763,7 +762,7 @@ export default function PosTablesPage() {
                           onChange={(event) => setCustomerPhone(event.target.value)}
                           inputMode="tel"
                           placeholder={copy.customerPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>
@@ -771,7 +770,7 @@ export default function PosTablesPage() {
                   {customerCountField}
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:min-h-20 sm:text-[13px]" />
+                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:min-h-20 sm:text-[13px]" />
                   </label>
                   {reservationDraftOpen && (
                     <div className="motion-reservation-panel rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/60 dark:bg-sky-950/25">
@@ -783,7 +782,7 @@ export default function PosTablesPage() {
                           inputMode="tel"
                           autoFocus
                           placeholder={copy.reservationPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="mt-3 block">
@@ -792,7 +791,7 @@ export default function PosTablesPage() {
                           value={reservationName}
                           onChange={(event) => setReservationName(event.target.value)}
                           placeholder={copy.reservationNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>

@@ -1,6 +1,5 @@
 import { apiClient } from "./apiClient";
 import type {
-  ExpenseDetailReport,
   ManagerReport,
   SalesByHourReport,
   SalesDetailReport,
@@ -17,10 +16,6 @@ export const getSalesByHour = (date: string) =>
 // axios drops undefined params on its own, so no need to branch on it here.
 export const getSalesDetail = (date: string, hour?: number) =>
   apiClient.get<SalesDetailReport>("/api/v1/reports/sales-detail", { params: { date, hour } });
-
-// Cost bars drill into ingredients, not bills — a different table entirely.
-export const getExpenseDetail = (date: string, hour?: number) =>
-  apiClient.get<ExpenseDetailReport>("/api/v1/reports/expense-detail", { params: { date, hour } });
 
 export const getTopMenuItemsByMonth = (year: number, month: number) =>
   apiClient.get<TopMenuItemsReport>("/api/v1/reports/top-menu-items", {

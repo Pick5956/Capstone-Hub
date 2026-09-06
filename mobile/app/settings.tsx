@@ -8,6 +8,7 @@ import { can } from '@/src/lib/rbac';
 import { canAccessTeam } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { usePrinter } from '@/src/providers/printer-provider';
 import { breakpoints, palette, spacing } from '@/src/theme';
 
 export default function SettingsScreen() {
@@ -17,15 +18,20 @@ export default function SettingsScreen() {
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const canManageRestaurant = can(activeMembership, 'manage_restaurant_settings');
   const canManageTeam = canAccessTeam(activeMembership);
+  const { selectedPrinter, supported: printerSupported } = usePrinter();
+  const printerDetail = !printerSupported
+    ? copy('รองรับเฉพาะ Android', 'Android only')
+    : selectedPrinter?.name || copy('ยังไม่ได้เลือกเครื่องพิมพ์', 'No printer selected');
   const settingsItems: Array<{ title: string; detail: string; href: string; icon: AppIconName; show: boolean }> = [
     { title: copy('บัญชีของฉัน', 'My account'), detail: user?.email || copy('ชื่อและเบอร์โทร', 'Name and phone'), href: '/settings/account', icon: 'person-outline', show: true },
-    { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษาและขนาดตัวอักษร', 'Language and text size'), href: '/settings/display', icon: 'text-outline', show: true },
+    { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษา', 'Language'), href: '/settings/display', icon: 'text-outline', show: true },
+    { title: copy('เครื่องพิมพ์ใบเสร็จ', 'Receipt printer'), detail: printerDetail, href: '/settings/printer', icon: 'print-outline', show: true },
     { title: copy('ข้อมูลร้าน', 'Restaurant'), detail: copy('ข้อมูลร้าน บิล และ QR', 'Restaurant, bill and QR settings'), href: '/settings/restaurant', icon: 'storefront-outline', show: canManageRestaurant },
     { title: copy('ทีมและสิทธิ์', 'Team and access'), detail: copy('พนักงาน บทบาท และคำเชิญ', 'Staff, roles and invitations'), href: '/staff', icon: 'people-outline', show: canManageTeam },
     { title: copy('สลับร้าน', 'Switch restaurant'), detail: copy('เลือกร้านหรือสาขาอื่น', 'Choose another restaurant or branch'), href: '/restaurants', icon: 'swap-horizontal-outline', show: true },
   ];
   const items = settingsItems.filter((item) => item.show);
-  const accountItems = items.filter((item) => item.href === '/settings/account' || item.href === '/settings/display');
+  const accountItems = items.filter((item) => item.href === '/settings/account' || item.href === '/settings/display' || item.href === '/settings/printer');
   const managementItems = items.filter((item) => item.href === '/settings/restaurant' || item.href === '/staff');
   const restaurantItems = items.filter((item) => item.href === '/restaurants');
 

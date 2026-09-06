@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Switch, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { createTableZone, deleteTableZone, listTableZones, updateTableZone } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
@@ -158,13 +158,6 @@ export default function ZoneManagerScreen() {
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
         <View style={{ flex: 1 }}><TextField label={copy('คำนำหน้า', 'Prefix')} value={zonePrefix} onChangeText={setZonePrefix} /></View>
         <View style={{ flex: 1 }}><TextField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={zoneOrder} onChangeText={setZoneOrder} /></View>
-      </View>
-      <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.sm }}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={typeScale.cardTitle}>{copy('เปิดใช้งาน', 'Active')}</Text>
-          <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('แสดงโซนนี้ตอนจัดโต๊ะ', 'Show this zone when organizing tables')}</Text>
-        </View>
-        <Switch value={zoneActive} onValueChange={setZoneActive} />
       </View>
       {tabletWorkspace ? <Button icon="checkmark" label={editingZone ? copy('บันทึกโซน', 'Save zone') : copy('เพิ่มโซน', 'Add zone')} onPress={saveZone} loading={submitting} /> : null}
     </Surface>

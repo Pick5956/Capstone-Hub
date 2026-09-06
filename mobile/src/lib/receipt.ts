@@ -42,45 +42,118 @@ function locationLabel(bill: Bill, language: DisplayLanguage): string {
       : bill.order.order_number);
 }
 
-export function buildReceiptShareText(
+export type ReceiptRestaurant = Pick<
+  Restaurant,
+  'name' | 'branch_name' | 'address' | 'phone'
+>;
+
+export interface ReceiptModelItem {
+  key: string;
+  quantity: string;
+  name: string;
+  amount: string;
+  options: string;
+  note: string;
+}
+
+export interface ReceiptModelTotal {
+  key: string;
+  label: string;
+  amount: string;
+  emphasis: boolean;
+}
+
+export interface ReceiptModel {
+  heading: string[];
+  title: string;
+  meta: Array<{ key: string; label: string; value: string }>;
+  items: ReceiptModelItem[];
+  totals: ReceiptModelTotal[];
+  paymentLine: string;
+  footer: string;
+}
+
+/**
+ * One structured description of a receipt, shared by the text that gets shared
+ * to a customer and the bitmap that gets rastered to the counter printer, so the
+ * two can never drift apart on which lines a receipt is supposed to carry.
+ */
+export function buildReceiptModel(
   bill: Bill,
-  restaurant?: Pick<Restaurant, 'name' | 'branch_name' | 'address' | 'phone'>,
+  restaurant?: ReceiptRestaurant,
   language: DisplayLanguage = 'th',
-): string {
+): ReceiptModel {
   const payment = bill.payments.at(-1);
   const copy = (thai: string, english: string) => language === 'th' ? thai : english;
-  const lines = [
-    restaurant?.name?.trim() || 'Dishy',
-    restaurant?.branch_name?.trim() || '',
-    restaurant?.address?.trim() || '',
-    restaurant?.phone?.trim() ? `Tel. ${restaurant.phone.trim()}` : '',
-    copy('ใบเสร็จรับเงิน', 'Receipt'),
-    `${copy('เลขอ้างอิง', 'Reference')} ${bill.order.order_number}`,
-    `${copy('วันที่', 'Date')} ${receiptDate(bill, language)}`,
-    `${copy('โต๊ะ / ช่องทาง', 'Table / channel')} ${locationLabel(bill, language)}`,
-    `${copy('พนักงาน', 'Staff')} ${staffName(bill)}`,
-    '',
-    ...bill.items.flatMap((item) => [
-      `${item.quantity.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')} × ${item.menu_name}  ${receiptMoney(item.subtotal, language)}`,
-      item.selected_options?.length
-        ? `+ ${item.selected_options.map((option) => option.option_name).join(', ')}`
+  const locale = language === 'th' ? 'th-TH' : 'en-US';
+
+  const totals: ReceiptModelTotal[] = [
+    {
+      key: 'subtotal',
+      label: copy('ยอดอาหาร', 'Food subtotal'),
+      amount: receiptMoney(bill.subtotal, language),
+      emphasis: false,
+    },
+  ];
+  if (bill.discount_amount > 0) {
+    totals.push({
+      key: 'discount',
+      label: copy('ส่วนลด', 'Discount'),
+      amount: `−${receiptMoney(bill.discount_amount, language)}`,
+      emphasis: false,
+    });
+  }
+  if (bill.service_charge_enabled || bill.service_charge_amount > 0) {
+    totals.push({
+      key: 'service',
+      label: copy('ค่าบริการ', 'Service charge'),
+      amount: receiptMoney(bill.service_charge_amount, language),
+      emphasis: false,
+    });
+  }
+  if (bill.vat_enabled || bill.vat_amount > 0) {
+    totals.push({
+      key: 'vat',
+      label: 'VAT',
+      amount: receiptMoney(bill.vat_amount, language),
+      emphasis: false,
+    });
+  }
+  totals.push({
+    key: 'grand',
+    label: copy('ยอดสุทธิ', 'Grand total'),
+    amount: receiptMoney(bill.grand_total, language),
+    emphasis: true,
+  });
+
+  return {
+    heading: [
+      restaurant?.name?.trim() || 'Dishy',
+      restaurant?.branch_name?.trim() || '',
+      restaurant?.address?.trim() || '',
+      restaurant?.phone?.trim() ? `Tel. ${restaurant.phone.trim()}` : '',
+    ].filter(Boolean),
+    title: copy('ใบเสร็จรับเงิน', 'Receipt'),
+    meta: [
+      { key: 'reference', label: copy('เลขอ้างอิง', 'Reference'), value: bill.order.order_number },
+      { key: 'date', label: copy('วันที่', 'Date'), value: receiptDate(bill, language) },
+      { key: 'location', label: copy('โต๊ะ / ช่องทาง', 'Table / channel'), value: locationLabel(bill, language) },
+      { key: 'staff', label: copy('พนักงาน', 'Staff'), value: staffName(bill) },
+    ],
+    items: bill.items.map((item, index) => ({
+      key: String(item.ID ?? index),
+      quantity: item.quantity.toLocaleString(locale),
+      name: item.menu_name,
+      amount: receiptMoney(item.subtotal, language),
+      options: item.selected_options?.length
+        ? item.selected_options.map((option) => option.option_name).join(', ')
         : '',
-      item.note?.trim() ? `* ${item.note.trim()}` : '',
-    ]),
-    '',
-    `${copy('ยอดอาหาร', 'Food subtotal')} ${receiptMoney(bill.subtotal, language)}`,
-    bill.discount_amount > 0 ? `${copy('ส่วนลด', 'Discount')} −${receiptMoney(bill.discount_amount, language)}` : '',
-    bill.service_charge_enabled || bill.service_charge_amount > 0
-      ? `${copy('ค่าบริการ', 'Service charge')} ${receiptMoney(bill.service_charge_amount, language)}`
-      : '',
-    bill.vat_enabled || bill.vat_amount > 0 ? `VAT ${receiptMoney(bill.vat_amount, language)}` : '',
-    `${copy('ยอดสุทธิ', 'Grand total')} ${receiptMoney(bill.grand_total, language)}`,
-    payment
+      note: item.note?.trim() || '',
+    })),
+    totals,
+    paymentLine: payment
       ? `${copy('ชำระโดย', 'Paid by')} ${payment.method === 'cash' ? copy('เงินสด', 'Cash') : 'PromptPay QR'}`
       : copy('ยังไม่ชำระ', 'Unpaid'),
-    '',
-    copy('ขอบคุณที่ใช้บริการ', 'Thank you'),
-  ];
-
-  return lines.filter((line, index) => line || lines[index - 1] !== '').join('\n').trim();
+    footer: copy('ขอบคุณที่ใช้บริการ', 'Thank you'),
+  };
 }

@@ -69,6 +69,7 @@ export default function CurrentRoundItemScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [menuImageById, setMenuImageById] = useState<ReadonlyMap<number, string>>(new Map());
   const [quantity, setQuantity] = useState(1);
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export default function CurrentRoundItemScreen() {
       const nextItem = findPendingOrderItem(nextOrder.items, itemId);
       setOrder(nextOrder);
       setQuantity(nextItem?.quantity ?? 1);
+      setNote(nextItem?.note ?? '');
       setMenuImageById(new Map(
         (menuResponse.menu_items ?? [])
           .filter((menu) => Boolean(menu.image_url?.trim()))
@@ -114,16 +116,16 @@ export default function CurrentRoundItemScreen() {
     return () => requestGuardRef.current.invalidateLoads();
   }, [load]));
 
-  async function saveQuantity() {
-    if (!item || locked || quantity === item.quantity || !requestGuardRef.current.beginMutation()) return;
+  async function saveItem() {
+    if (!item || locked || !changed || !requestGuardRef.current.beginMutation()) return;
 
     setSaving(true);
     setError(null);
     try {
-      await updateOrderItem(orderId, item.ID, { quantity, note: item.note });
+      await updateOrderItem(orderId, item.ID, { quantity, note: note.trim() });
       router.back();
     } catch (err) {
-      setError(err instanceof Error ? err.message : language === 'th' ? 'บันทึกจำนวนไม่สำเร็จ' : 'Could not save the quantity');
+      setError(err instanceof Error ? err.message : language === 'th' ? 'บันทึกรายการไม่สำเร็จ' : 'Could not save this item');
     } finally {
       requestGuardRef.current.finishMutation();
       setSaving(false);
@@ -132,7 +134,7 @@ export default function CurrentRoundItemScreen() {
 
   if (!canTakeOrder) {
     return (
-      <AppScreen title={language === 'th' ? 'แก้จำนวน' : 'Edit quantity'} topLevel={false}>
+      <AppScreen title={language === 'th' ? 'แก้ไขรายการ' : 'Edit item'} topLevel={false}>
         <EmptyState title={language === 'th' ? 'ไม่มีสิทธิ์รับออเดอร์' : 'No order-taking permission'} />
       </AppScreen>
     );
@@ -140,7 +142,7 @@ export default function CurrentRoundItemScreen() {
 
   if (!validParams) {
     return (
-      <AppScreen title={language === 'th' ? 'แก้จำนวน' : 'Edit quantity'} topLevel={false}>
+      <AppScreen title={language === 'th' ? 'แก้ไขรายการ' : 'Edit item'} topLevel={false}>
         <EmptyState title={language === 'th' ? 'ไม่พบรายการนี้' : 'Item not found'} />
       </AppScreen>
     );
@@ -152,7 +154,7 @@ export default function CurrentRoundItemScreen() {
   }, menuImageById) : null;
   const unitSubtotal = item && item.quantity > 0 ? item.subtotal / item.quantity : 0;
   const total = unitSubtotal * quantity;
-  const quantityChanged = Boolean(item && quantity !== item.quantity);
+  const changed = Boolean(item && (quantity !== item.quantity || note.trim() !== (item.note ?? '').trim()));
   const contextLabel = order
     ? order.table?.display_label || (order.order_type === 'takeaway'
       ? language === 'th' ? 'ซื้อกลับบ้าน' : 'Takeaway'
@@ -164,22 +166,22 @@ export default function CurrentRoundItemScreen() {
       value={money(total, language)}
     >
       <Button
-        label={language === 'th' ? 'บันทึกจำนวน' : 'Save quantity'}
-        onPress={saveQuantity}
+        label={language === 'th' ? 'บันทึกรายการ' : 'Save item'}
+        onPress={saveItem}
         loading={saving}
-        disabled={Boolean(locked) || !quantityChanged}
+        disabled={Boolean(locked) || !changed}
       />
     </ActionDock>
   ) : undefined;
 
   return (
     <AppScreen
-      title={item?.menu_name || (language === 'th' ? 'แก้จำนวน' : 'Edit quantity')}
+      title={item?.menu_name || (language === 'th' ? 'แก้ไขรายการ' : 'Edit item')}
       subtitle={contextLabel}
       topLevel={false}
       footer={footer}
     >
-      {error ? <Feedback title={language === 'th' ? 'บันทึกจำนวนไม่ได้' : 'Could not save the quantity'} detail={error} tone="danger" /> : null}
+      {error ? <Feedback title={language === 'th' ? 'บันทึกรายการไม่ได้' : 'Could not save this item'} detail={error} tone="danger" /> : null}
       {loading ? (
         <EmptyState title={language === 'th' ? 'กำลังโหลดรายการ' : 'Loading item'} />
       ) : item ? (
@@ -191,14 +193,16 @@ export default function CurrentRoundItemScreen() {
           />
           <Surface>
             {item.selected_options?.length ? (
-              <Text selectable style={[typeScale.body, { color: palette.muted }]}>
-                {item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(' · ')}
-              </Text>
-            ) : null}
-            {item.note ? (
-              <Text selectable style={[typeScale.body, { color: palette.muted }]}>
-                {language === 'th' ? 'หมายเหตุ' : 'Note'}: {item.note}
-              </Text>
+              <View style={{ gap: 2 }}>
+                <Text selectable style={[typeScale.body, { color: palette.muted }]}>
+                  {item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(' · ')}
+                </Text>
+                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                  {language === 'th'
+                    ? 'เปลี่ยนตัวเลือกไม่ได้ ถ้าต้องแก้ให้ลบรายการนี้แล้วสั่งใหม่'
+                    : 'Options cannot be changed. Remove this item and add it again instead.'}
+                </Text>
+              </View>
             ) : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.sm }}>
               <QuantityButton

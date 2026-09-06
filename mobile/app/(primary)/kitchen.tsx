@@ -1,13 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { listMenuItems } from '@/src/api/menu';
 import { kitchenQueue, updateOrderItemStatus } from '@/src/api/order';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
-import { MenuImage } from '@/src/components/menu-image';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import { useKitchenOrderEvents } from '@/src/hooks/use-kitchen-order-events';
 import {
@@ -21,14 +19,17 @@ import {
   TextField,
 } from '@/src/components/ui';
 import { itemStatusLabel } from '@/src/lib/format';
-import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   createKitchenMutationGate,
+  formatKitchenDuration,
   KitchenMutationError,
   kitchenFulfillmentContext,
+  kitchenRoundDurationSeconds,
+  kitchenRoundFinishedLabel,
   kitchenTicketSentTimeLabel,
   kitchenTicketTiming,
   runKitchenMutation,
+  sortKitchenRoundsByFinish,
 } from '@/src/lib/kitchen-workflow';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
 import {
@@ -44,39 +45,30 @@ import { useDisplayPreferences } from '@/src/providers/display-preferences-provi
 import { palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Order, OrderItem } from '@/src/types/order';
 
-type KitchenLane = 'cooking' | 'done';
-
 const styles = StyleSheet.create({
-  focusSwitch: {
+  sheetHeader: {
     flexDirection: 'row',
-    gap: 2,
-    borderRadius: radius.md,
-    backgroundColor: palette.surfaceStrong,
-    padding: 3,
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    backgroundColor: palette.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  focusButton: {
-    minHeight: 44,
-    flex: 1,
+  sheetBody: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  sheetRoundMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-  },
-  focusLabel: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  focusCount: {
-    minWidth: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  focusCountText: {
-    fontSize: 12,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
+    backgroundColor: palette.surface,
+    padding: spacing.md,
   },
   board: {
     alignItems: 'flex-start',
@@ -316,8 +308,7 @@ export default function KitchenScreen() {
   const canUpdate = access.canUpdate;
   const canView = access.canView;
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuImageById, setMenuImageById] = useState<ReadonlyMap<number, string>>(new Map());
-  const [filter, setFilter] = useState<KitchenLane>('cooking');
+  const [completedOpen, setCompletedOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -325,29 +316,12 @@ export default function KitchenScreen() {
   const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
-  const [undoConfirmId, setUndoConfirmId] = useState<number | null>(null);
   const mutationGateRef = useRef(createKitchenMutationGate());
   const requestGenerationRef = useRef(createRequestGeneration());
   const foregroundRequestRef = useRef<number | null>(null);
   const pendingQuietRefreshRef = useRef(false);
   const adjacentWarmRequestedRef = useRef(false);
   const primaryTabSceneStatus = usePrimaryTabSceneStatus();
-
-  useEffect(() => {
-    if (!canView) return;
-    let active = true;
-    void listMenuItems()
-      .then((response) => {
-        if (!active) return;
-        setMenuImageById(new Map(
-          (response.menu_items || []).map((item) => [item.ID, item.image_url]),
-        ));
-      })
-      .catch(() => {
-        if (active) setMenuImageById(new Map());
-      });
-    return () => { active = false; };
-  }, [canView]);
 
   const requestQueueSnapshot = useCallback(async (request: number) => {
     try {
@@ -407,7 +381,7 @@ export default function KitchenScreen() {
     }
   }, [canView, copy, requestQueueSnapshot]);
 
-  useKitchenOrderEvents(
+  const realtimeStatus = useKitchenOrderEvents(
     () => load(true),
     {
       enabled: canView && (primaryTabSceneStatus === null || primaryTabSceneStatus === 'active'),
@@ -448,16 +422,18 @@ export default function KitchenScreen() {
     () => orders.filter((order) => (order.items || []).some((item) => isKitchenDoneItem(item.status))),
     [orders],
   );
-  const visibleGroups = width >= 820
-    ? [
-        { title: copy('กำลังทำ', 'Cooking'), orders: cookingTickets, kind: 'cooking' as const },
-        { title: copy('ครัวทำเสร็จ', 'Kitchen done'), orders: doneTickets, kind: 'done' as const },
-      ]
-    : [{
-        title: filter === 'cooking' ? copy('กำลังทำ', 'Cooking') : copy('ครัวทำเสร็จ', 'Kitchen done'),
-        orders: filter === 'cooking' ? cookingTickets : doneTickets,
-        kind: filter,
-      }];
+  // The board shows only what the kitchen still has to cook, the way the web
+  // does; finished rounds move into the completed sheet so the pass is not
+  // reading past them all service.
+  const cookingGroup = {
+    title: copy('กำลังทำ', 'Cooking'),
+    orders: cookingTickets,
+    kind: 'cooking' as const,
+  };
+  const doneGroup = {
+    title: copy('ครัวทำเสร็จ', 'Kitchen done'),
+    orders: sortKitchenRoundsByFinish(doneTickets),
+  };
 
   function releaseMutationGate() {
     mutationGateRef.current.release();
@@ -545,12 +521,52 @@ export default function KitchenScreen() {
     }
   }
 
+  /**
+   * Pulls a finished round back to cooking in one go, the way the web's
+   * completed sheet does, for when the pass spots something wrong after the
+   * round was already called done.
+   */
+  async function recallRound(order: Order) {
+    if (!canUpdate) return;
+    const items = (order.items || []).filter((item) => isKitchenDoneItem(item.status));
+    if (!items.length) return;
+    if (!mutationGateRef.current.tryAcquire()) return;
+    requestGenerationRef.current.invalidate();
+    const actionKey = `recall:${kitchenTicketKey(order)}`;
+    let updatedCount = 0;
+    setSubmittingKey(actionKey);
+    setError(null);
+    setMessage(null);
+    try {
+      await runKitchenMutation(async () => {
+        for (const item of items) {
+          await updateOrderItemStatus(order.ID, item.ID, 'cooking');
+          updatedCount += 1;
+        }
+      }, reconcileQueue);
+      setMessage(copy('ดึงทั้งรอบกลับไปกำลังทำแล้ว', 'The whole round was moved back to Cooking'));
+    } catch (err) {
+      const mutationError = err instanceof KitchenMutationError ? err.mutationError : err;
+      const detail = mutationError instanceof Error
+        ? mutationError.message
+        : copy('ดึงรอบกลับไม่สำเร็จ', 'Could not move the round back');
+      setError(updatedCount > 0
+        ? copy(
+          `ย้ายกลับสำเร็จ ${updatedCount.toLocaleString('th-TH')} จาก ${items.length.toLocaleString('th-TH')} รายการ · ${detail}`,
+          `Moved back ${updatedCount.toLocaleString('en-US')} of ${items.length.toLocaleString('en-US')} items · ${detail}`,
+        )
+        : detail);
+    } finally {
+      setSubmittingKey(null);
+      releaseMutationGate();
+    }
+  }
+
   function startCancel(itemId: number) {
     if (mutationGateRef.current.locked) return;
     setCancelTargetId(itemId);
     setCancelReason('');
     setCancelReasonError(null);
-    setUndoConfirmId(null);
   }
 
   async function confirmCancel(orderId: number, item: OrderItem) {
@@ -576,88 +592,19 @@ export default function KitchenScreen() {
     }
   }
 
-  async function confirmUndo(orderId: number, item: OrderItem) {
-    if (!canUpdate || mutationGateRef.current.locked) return;
-    if (undoConfirmId !== item.ID) {
-      setUndoConfirmId(item.ID);
-      setCancelTargetId(null);
-      return;
-    }
-    const succeeded = await setItemStatus(
-      orderId,
-      item,
-      'cooking',
-      undefined,
-      copy('ย้ายรายการกลับไปกำลังทำแล้ว', 'Item moved back to Cooking'),
-    );
-    if (succeeded) setUndoConfirmId(null);
-  }
-
   if (!canView) {
     return <AppScreen title={copy('จอครัว', 'Kitchen display')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูคิวครัว', 'No permission to view the kitchen queue')} detail={copy('ต้องมีสิทธิ์ view_kitchen', 'The view_kitchen permission is required.')} /></AppScreen>;
   }
 
-  return (
-    <AppScreen
-      title={copy('ครัว', 'Kitchen')}
-      topLevel
-      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
-      contentMaxWidth={1320}
-      contentStyle={{ gap: spacing.lg }}
-    >
-      {error ? <Feedback title={copy('คิวครัวมีปัญหา', 'Kitchen queue issue')} detail={error} tone="danger" /> : null}
-      {message ? <Feedback title={message} tone="success" /> : null}
-      {!canUpdate ? (
-        <Feedback
-          title={copy('โหมดดูคิวครัว', 'Kitchen view mode')}
-          detail={copy('บัญชีนี้ดูสถานะได้ แต่ไม่มีสิทธิ์เปลี่ยนสถานะรายการอาหาร', 'This account can view the queue but cannot change item statuses.')}
-          tone="info"
-        />
-      ) : null}
-      {width < 820 ? (
-        <View accessibilityRole="tablist" style={styles.focusSwitch}>
-          {([
-            {
-              key: 'cooking' as const,
-              label: copy('กำลังทำ', 'Cooking'),
-              count: cookingTickets.length,
-            },
-            {
-              key: 'done' as const,
-              label: copy('ทำเสร็จ', 'Done'),
-              count: doneTickets.length,
-            },
-          ]).map((option) => {
-            const selected = option.key === filter;
-            return (
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-                key={option.key}
-                onPress={() => setFilter(option.key)}
-                style={({ pressed }) => [
-                  styles.focusButton,
-                  {
-                    backgroundColor: selected ? palette.primary : 'transparent',
-                    opacity: pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.focusLabel, { color: selected ? palette.primaryText : palette.text }]}>{option.label}</Text>
-                <View style={styles.focusCount}>
-                  <Text style={[styles.focusCountText, { color: selected ? palette.primaryText : palette.muted }]}>
-                    {option.count.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-      <View style={[styles.board, { flexDirection: width >= 820 ? 'row' : 'column' }]}>
-        {visibleGroups.map((group) => (
+  // One lane, rendered twice: the cooking board on screen, and the finished
+  // rounds inside the completed sheet. A single renderer keeps the two from
+  // drifting on how a ticket looks or which actions it offers.
+  const renderKitchenLane = (group: {
+    title: string;
+    orders: Order[];
+  }) => (
           <View
-            key={group.kind}
+            key="cooking"
             style={[
               styles.lane,
               {
@@ -666,13 +613,13 @@ export default function KitchenScreen() {
               },
             ]}
           >
-            {width >= 820 ? (
+            {/* The heading names the zone on every width now that the lane switch is gone. */}
               <View style={styles.laneHeader}>
                 <View style={styles.laneIdentity}>
                   <View
                     style={[
                       styles.laneDot,
-                      { backgroundColor: group.kind === 'cooking' ? palette.warning : palette.success },
+                      { backgroundColor: palette.warning },
                     ]}
                   />
                   <Text accessibilityRole="header" selectable style={styles.laneTitle}>{group.title}</Text>
@@ -684,14 +631,10 @@ export default function KitchenScreen() {
                   )}
                 </Text>
               </View>
-            ) : null}
+
             {group.orders.map((order) => {
               const ticketKey = kitchenTicketKey(order);
-              const items = (order.items || []).filter((item) => (
-                group.kind === 'done'
-                  ? isKitchenDoneItem(item.status)
-                  : isCookingItem(item.status)
-              ));
+              const items = (order.items || []).filter((item) => isCookingItem(item.status));
               const tableLabel = order.table?.display_label
                 || order.table?.table_number
                 || (order.table_id ? String(order.table_id) : '−');
@@ -712,16 +655,10 @@ export default function KitchenScreen() {
                 kitchen_sent_at: order.kitchen_sent_at,
                 items,
               });
-              const ticketBorderColor = group.kind === 'done'
-                ? palette.success
-                : timing.urgency === 'overdue'
-                  ? palette.danger
-                  : palette.warning;
-              const ticketHeaderBackground = group.kind === 'done'
-                ? palette.success
-                : timing.urgency === 'overdue'
-                  ? palette.danger
-                  : palette.warning;
+              const ticketBorderColor = timing.urgency === 'overdue'
+                ? palette.danger
+                : palette.warning;
+              const ticketHeaderBackground = ticketBorderColor;
               const urgencyLabel = timing.urgency === 'overdue'
                 ? copy('เกินเวลา', 'Overdue')
                 : timing.urgency === 'warning'
@@ -754,37 +691,24 @@ export default function KitchenScreen() {
                         ].filter(Boolean).join(' · ')}
                       </Text>
                     </View>
-                    {group.kind === 'cooking' ? (
-                      <View style={styles.timer}>
-                        <View style={styles.timerLine}>
-                          <Text selectable style={styles.timerValue}>
-                            {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
-                          </Text>
-                          <Text selectable style={styles.timerUnit}>{copy('นาที', 'min')}</Text>
-                        </View>
-                        {urgencyLabel ? <Text selectable style={styles.timerUrgency}>{urgencyLabel}</Text> : null}
+                    <View style={styles.timer}>
+                      <View style={styles.timerLine}>
+                        <Text selectable style={styles.timerValue}>
+                          {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
+                        </Text>
+                        <Text selectable style={styles.timerUnit}>{copy('นาที', 'min')}</Text>
                       </View>
-                    ) : null}
-                  </View>
+                      {urgencyLabel ? <Text selectable style={styles.timerUrgency}>{urgencyLabel}</Text> : null}
+                    </View>
+                </View>
                   {items.map((item, index) => {
                     const cancelling = cancelTargetId === item.ID;
-                    const confirmingUndo = undoConfirmId === item.ID;
                     const fulfillment = kitchenFulfillmentContext(order.order_type, item.fulfillment_type);
-                    const imageUrl = selectOrderItemImage({
-                      menuId: item.menu_id,
-                      menuImageUrl: item.menu?.image_url,
-                    }, menuImageById);
                     return (
                       <View key={item.ID}>
                         {index ? <Divider /> : null}
                         <View style={styles.item}>
                           <View style={styles.itemMain}>
-                            <MenuImage
-                              accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                              imageUrl={imageUrl}
-                              size={width >= 820 ? 60 : 52}
-                              variant="row"
-                            />
                             <View style={styles.itemContent}>
                               <View style={styles.itemTitleRow}>
                                 <View
@@ -821,14 +745,14 @@ export default function KitchenScreen() {
                                     : copy('รายการนี้ทานที่ร้าน', 'This item: Dine-in')}
                                 </Text>
                               ) : null}
-                              {!canUpdate || group.kind === 'done' ? (
+                              {!canUpdate ? (
                                 <StatusBadge
-                                  label={group.kind === 'done' ? copy('ครัวทำเสร็จ', 'Kitchen done') : itemStatusLabel(item.status, language)}
-                                  tone={group.kind === 'done' ? 'success' : 'warning'}
+                                  label={itemStatusLabel(item.status, language)}
+                                  tone="warning"
                                 />
                               ) : null}
                             </View>
-                            {canUpdate && group.kind === 'cooking' && !cancelling ? (
+                            {canUpdate && !cancelling ? (
                               <View style={styles.itemActions}>
                                 <KitchenIconAction
                                   label={copy(`ทำ ${item.menu_name} เสร็จ`, `Mark ${item.menu_name} done`)}
@@ -848,17 +772,9 @@ export default function KitchenScreen() {
                                 />
                               </View>
                             ) : null}
-                            {canUpdate && group.kind === 'done' && !confirmingUndo ? (
-                              <KitchenIconAction
-                                label={copy(`ย้าย ${item.menu_name} กลับไปกำลังทำ`, `Move ${item.menu_name} back to Cooking`)}
-                                icon="arrow-undo-outline"
-                                onPress={() => confirmUndo(order.ID, item)}
-                                disabled={submittingKey !== null}
-                              />
-                            ) : null}
                           </View>
 
-                          {canUpdate && group.kind === 'cooking' && cancelling ? (
+                          {canUpdate && cancelling ? (
                             <View style={styles.inlineFlow}>
                               <TextField
                                 label={copy('เหตุผลที่ยกเลิก', 'Cancellation reason')}
@@ -908,36 +824,11 @@ export default function KitchenScreen() {
                             </View>
                           ) : null}
 
-                          {canUpdate && group.kind === 'done' && confirmingUndo ? (
-                            <View style={styles.inlineFlow}>
-                              <Text selectable style={[typeScale.body, { color: palette.text }]}>
-                                {copy('ยืนยันย้ายรายการนี้กลับไปโซนกำลังทำ', 'Move this item back to the Cooking lane?')}
-                              </Text>
-                              <View style={[styles.itemActions, { flexDirection: width < 420 ? 'column' : 'row' }]}>
-                                <Button
-                                  compact
-                                  variant="secondary"
-                                  label={copy('ยกเลิก', 'Cancel')}
-                                  onPress={() => setUndoConfirmId(null)}
-                                  disabled={submittingKey !== null}
-                                  style={{ flex: 1 }}
-                                />
-                                <Button
-                                  compact
-                                  label={copy('ยืนยันย้ายกลับ', 'Confirm move back')}
-                                  onPress={() => confirmUndo(order.ID, item)}
-                                  loading={submittingKey === `cooking:${item.ID}`}
-                                  disabled={submittingKey !== null}
-                                  style={{ flex: 1 }}
-                                />
-                              </View>
-                            </View>
-                          ) : null}
                         </View>
                       </View>
                     );
                   })}
-                  {canUpdate && group.kind === 'cooking' && items.length > 1 ? (
+                  {canUpdate && items.length > 1 ? (
                     <View style={styles.ticketFooter}>
                        <Button
                          variant="ghost"
@@ -953,15 +844,119 @@ export default function KitchenScreen() {
             })}
             {!loading && !group.orders.length ? (
               <EmptyState
-                title={group.kind === 'cooking' ? copy('ไม่มีรายการกำลังทำ', 'No items cooking') : copy('ยังไม่มีรายการที่ครัวทำเสร็จ', 'No kitchen-done items yet')}
-                detail={group.kind === 'cooking'
-                  ? copy('รายการใหม่จะเข้าคิวอัตโนมัติเมื่อส่งออเดอร์เข้าครัว', 'New items appear automatically after an order is sent to the kitchen.')
-                  : copy('รายการที่ทำเสร็จจะอยู่ตรงนี้จนกว่าหน้าร้านจะรับชำระเงิน', 'Done items stay here until front-of-house takes payment.')}
+                title={copy('ไม่มีรายการกำลังทำ', 'No items cooking')}
               />
             ) : null}
           </View>
-        ))}
+  );
+
+  return (
+    <AppScreen
+      title={copy('ครัว', 'Kitchen')}
+      topLevel
+      action={(
+        <Button
+          compact
+          icon="time-outline"
+          variant="secondary"
+        label={copy('รายการที่เสร็จสิ้น', 'Completed')}
+          onPress={() => setCompletedOpen(true)}
+        />
+      )}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
+      contentMaxWidth={1320}
+      contentStyle={{ gap: spacing.lg }}
+    >
+      {error ? <Feedback title={copy('คิวครัวมีปัญหา', 'Kitchen queue issue')} detail={error} tone="danger" /> : null}
+      {message ? <Feedback title={message} tone="success" /> : null}
+      {realtimeStatus === 'offline' ? (
+        <Feedback
+          tone="warning"
+          title={copy('การเชื่อมต่อสดหลุด', 'Live updates disconnected')}
+          detail={copy(
+            'คิวจะไม่อัปเดตเองจนกว่าจะต่อกลับได้ ระบบกำลังลองใหม่ ระหว่างนี้ดึงหน้าจอลงเพื่อรีเฟรชได้',
+            'The queue will not update on its own until the connection is back. Retrying now - pull down to refresh in the meantime.',
+          )}
+        />
+      ) : null}
+      {!canUpdate ? (
+        <Feedback
+          title={copy('โหมดดูคิวครัว', 'Kitchen view mode')}
+          detail={copy('บัญชีนี้ดูสถานะได้ แต่ไม่มีสิทธิ์เปลี่ยนสถานะรายการอาหาร', 'This account can view the queue but cannot change item statuses.')}
+          tone="info"
+        />
+      ) : null}
+      <View style={styles.board}>
+        {renderKitchenLane(cookingGroup)}
       </View>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setCompletedOpen(false)}
+        presentationStyle="pageSheet"
+        visible={completedOpen}
+      >
+        <View style={{ flex: 1, backgroundColor: palette.canvas }}>
+          <View style={styles.sheetHeader}>
+            <View style={{ minWidth: 0, flex: 1 }}>
+              <Text style={typeScale.cardTitle}>{copy('รายการที่เสร็จสิ้น', 'Completed')}</Text>
+            </View>
+            <Button
+              compact
+              variant="secondary"
+              icon="close"
+              label={copy('ปิด', 'Close')}
+              onPress={() => setCompletedOpen(false)}
+            />
+          </View>
+          <ScrollView contentContainerStyle={styles.sheetBody}>
+            {doneGroup.orders.length ? doneGroup.orders.map((order) => {
+              const tableLabel = order.table?.display_label
+                || order.table?.table_number
+                || (order.table_id ? String(order.table_id) : '−');
+              const roundTitle = order.order_type === 'takeaway'
+                ? copy('ซื้อกลับบ้าน', 'Takeaway')
+                : copy(`โต๊ะ ${tableLabel}`, `Table ${tableLabel}`);
+              const batchLabel = order.kitchen_batch
+                ? copy(`รอบ ${order.kitchen_batch.toLocaleString('th-TH')}`, `Batch ${order.kitchen_batch.toLocaleString('en-US')}`)
+                : copy('รอบครัว', 'Kitchen batch');
+              return (
+                <View key={`recall:${kitchenTicketKey(order)}`} style={styles.sheetRoundMeta}>
+                  <View style={{ minWidth: 0, flex: 1 }}>
+                    <Text selectable numberOfLines={1} style={typeScale.cardTitle}>{roundTitle}</Text>
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{batchLabel}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text selectable style={[typeScale.caption, { color: palette.text }]}>
+                      {copy('เสร็จเมื่อ', 'Finished')} {kitchenRoundFinishedLabel(order, language)}
+                    </Text>
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                      {copy('ใช้เวลา', 'Took')} {formatKitchenDuration(kitchenRoundDurationSeconds(order), language)}
+                    </Text>
+                  </View>
+                  {canUpdate ? (
+                    <KitchenIconAction
+                      label={copy(`ดึง ${roundTitle} กลับไปกำลังทำ`, `Move ${roundTitle} back to Cooking`)}
+                      icon="arrow-undo-outline"
+                      onPress={() => recallRound(order)}
+                      loading={submittingKey === `recall:${kitchenTicketKey(order)}`}
+                      disabled={submittingKey !== null}
+                    />
+                  ) : null}
+                </View>
+              );
+            }) : (
+              <EmptyState
+                title={copy('ยังไม่มีรายการที่ครัวทำเสร็จ', 'No items finished yet')}
+                detail={copy(
+                  'รายการที่ทำเสร็จจะมาอยู่ตรงนี้',
+                  'Rounds the kitchen has finished appear here.',
+                )}
+              />
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </AppScreen>
   );
 }

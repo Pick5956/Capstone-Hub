@@ -1145,7 +1145,7 @@ export default function AIOperationsFloatingChat() {
                matching the full AI page. sm+ keeps the bordered footer. */
             className="bg-transparent px-3 pb-3 pt-1 dark:bg-transparent sm:rounded-b-2xl sm:border-t sm:border-gray-200 sm:bg-white sm:p-3.5 sm:dark:border-gray-800 sm:dark:bg-gray-950"
           >
-            <div className="flex flex-col gap-1 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-col gap-1 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 dark:border-gray-800 dark:bg-gray-900">
               {/* A textarea, not an input: an input cannot wrap, so a long
                   question scrolled sideways out of sight while it was being
                   typed. Enter still sends; Shift+Enter starts a new line. */}

@@ -217,13 +217,13 @@ export default function DashboardAccountMenu({
           aria-label={copy.account}
           aria-expanded={open}
           aria-haspopup="menu"
-          className="flex w-full min-w-0 items-center gap-2 rounded-md border border-transparent p-1.5 text-left transition-colors hover:border-orange-700 hover:bg-orange-700"
+          className="flex w-full min-w-0 items-center gap-2 rounded-md border border-transparent p-1.5 text-left transition-colors hover:border-[var(--rail-border)] hover:bg-[var(--rail-hover-bg)]"
         >
           <UserAvatar src={user?.profile_image} name={displayName} size={34} className="h-[34px] w-[34px] shrink-0 text-[13px] text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[12px] font-bold leading-[1.6] text-orange-50">{displayName}</span>
+            <span className="truncate text-[12px] font-bold leading-[1.6] text-[var(--rail-fg)]">{displayName}</span>
             {/* Hidden on short viewports, where the nav needs the rows back. */}
-            <span className="truncate text-[11px] leading-[1.6] text-orange-200 [@media(max-height:760px)]:hidden">{roleText}</span>
+            <span className="truncate text-[11px] leading-[1.6] text-[var(--rail-fg-muted)] [@media(max-height:760px)]:hidden">{roleText}</span>
           </span>
         </button>
       ) : (

@@ -399,7 +399,7 @@ export default function CustomerTableOrderPage() {
 
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-11 w-full rounded-md border border-gray-200 bg-white pl-10 pr-3 text-[16px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-950" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-11 w-full rounded-md border border-gray-200 bg-white pl-7 pr-3 text-[16px] outline-none focus:border-orange-500 dark:border-gray-800 dark:bg-gray-950" />
         </div>
 
         {filteredMenu.length ? (

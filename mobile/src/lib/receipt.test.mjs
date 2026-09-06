@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildReceiptShareText } from './receipt.ts';
+import { buildReceiptModel } from './receipt.ts';
 
-test('shared receipt carries the same restaurant and payment context as web receipts', () => {
+test('the printed receipt carries the restaurant, order, and payment context', () => {
   const bill = {
     order: {
       order_number: 'A001',
@@ -41,27 +41,37 @@ test('shared receipt carries the same restaurant and payment context as web rece
     phone: '0000000000',
   };
 
-  const receipt = buildReceiptShareText(bill, restaurant);
+  const model = buildReceiptModel(bill, restaurant);
 
-  for (const expected of [
+  assert.deepEqual(model.heading, [
     'ร้านตัวอย่าง',
     'สาขากลาง',
     'กรุงเทพฯ',
     'Tel. 0000000000',
-    'เลขอ้างอิง A001',
-    'โต๊ะ / ช่องทาง โต๊ะ A1',
-    'พนักงาน มะลิ',
-    '2 × ข้าวผัด',
-    'ไข่ดาว',
-    'ไม่ใส่หอม',
-    'ชำระโดย PromptPay QR',
-  ]) {
-    assert.match(receipt, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  }
+  ]);
+  assert.equal(model.title, 'ใบเสร็จรับเงิน');
+  assert.deepEqual(
+    model.meta.map((entry) => [entry.label, entry.value]).filter(([label]) => label !== 'วันที่'),
+    [
+      ['เลขอ้างอิง', 'A001'],
+      ['โต๊ะ / ช่องทาง', 'โต๊ะ A1'],
+      ['พนักงาน', 'มะลิ'],
+    ],
+  );
+  assert.deepEqual(model.items, [{
+    key: '1',
+    quantity: '2',
+    name: 'ข้าวผัด',
+    amount: '฿120.00',
+    options: 'ไข่ดาว',
+    note: 'ไม่ใส่หอม',
+  }]);
+  assert.equal(model.paymentLine, 'ชำระโดย PromptPay QR');
+  assert.equal(model.footer, 'ขอบคุณที่ใช้บริการ');
 });
 
-test('shared receipt falls back safely when optional identity fields are absent', () => {
-  const receipt = buildReceiptShareText({
+test('optional identity fields fall back rather than printing blanks', () => {
+  const model = buildReceiptModel({
     order: {
       order_number: 'A002',
       order_type: 'takeaway',
@@ -79,14 +89,16 @@ test('shared receipt falls back safely when optional identity fields are absent'
     payments: [],
   });
 
-  assert.match(receipt, /Dishy/);
-  assert.match(receipt, /โต๊ะ \/ ช่องทาง ซื้อกลับบ้าน/);
-  assert.match(receipt, /วันที่ -/);
-  assert.match(receipt, /พนักงาน -/);
+  assert.deepEqual(model.heading, ['Dishy']);
+  const byLabel = Object.fromEntries(model.meta.map((entry) => [entry.label, entry.value]));
+  assert.equal(byLabel['โต๊ะ / ช่องทาง'], 'ซื้อกลับบ้าน');
+  assert.equal(byLabel['วันที่'], '-');
+  assert.equal(byLabel['พนักงาน'], '-');
+  assert.equal(model.paymentLine, 'ยังไม่ชำระ');
 });
 
-test('shared receipt localizes labels, money, dates, and payment method in English', () => {
-  const receipt = buildReceiptShareText({
+test('labels, money, and payment method localise to English', () => {
+  const model = buildReceiptModel({
     order: {
       order_number: 'A003',
       order_type: 'takeaway',
@@ -111,18 +123,66 @@ test('shared receipt localizes labels, money, dates, and payment method in Engli
     payments: [{ method: 'cash', paid_at: '2026-07-29T10:30:00Z' }],
   }, undefined, 'en');
 
-  for (const expected of [
-    'Receipt',
-    'Reference A003',
-    'Date ',
-    'Table / channel Takeaway',
-    'Staff May',
-    '2 × Fried rice  ฿1,200.00',
-    'Food subtotal ฿1,200.00',
-    'Grand total ฿1,200.00',
-    'Paid by Cash',
-    'Thank you',
-  ]) {
-    assert.match(receipt, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  }
+  assert.equal(model.title, 'Receipt');
+  const byLabel = Object.fromEntries(model.meta.map((entry) => [entry.label, entry.value]));
+  assert.equal(byLabel.Reference, 'A003');
+  assert.equal(byLabel['Table / channel'], 'Takeaway');
+  assert.equal(byLabel.Staff, 'May');
+  assert.equal(model.items[0].amount, '฿1,200.00');
+  assert.equal(model.paymentLine, 'Paid by Cash');
+  assert.equal(model.footer, 'Thank you');
+});
+
+test('the totals block only carries the lines the bill actually has', () => {
+  const base = {
+    order: { order_number: 'A004', order_type: 'dine_in' },
+    items: [],
+    subtotal: 100,
+    discount_amount: 0,
+    service_charge_enabled: false,
+    service_charge_amount: 0,
+    vat_enabled: false,
+    vat_amount: 0,
+    grand_total: 100,
+    payment_status: 'paid',
+    payments: [],
+  };
+
+  assert.deepEqual(
+    buildReceiptModel(base).totals.map((total) => total.key),
+    ['subtotal', 'grand'],
+  );
+  assert.deepEqual(
+    buildReceiptModel({
+      ...base,
+      discount_amount: 10,
+      service_charge_enabled: true,
+      service_charge_amount: 9,
+      vat_enabled: true,
+      vat_amount: 7,
+    }).totals.map((total) => total.key),
+    ['subtotal', 'discount', 'service', 'vat', 'grand'],
+  );
+});
+
+test('only the grand total is emphasised, and a discount reads as a deduction', () => {
+  const model = buildReceiptModel({
+    order: { order_number: 'A005', order_type: 'dine_in' },
+    items: [],
+    subtotal: 100,
+    discount_amount: 10,
+    service_charge_enabled: false,
+    service_charge_amount: 0,
+    vat_enabled: false,
+    vat_amount: 0,
+    grand_total: 90,
+    payment_status: 'paid',
+    payments: [],
+  });
+
+  const emphasised = model.totals.filter((total) => total.emphasis);
+  assert.equal(emphasised.length, 1);
+  assert.equal(emphasised[0].key, 'grand');
+  assert.equal(emphasised[0].amount, '฿90.00');
+  assert.equal(model.totals.find((total) => total.key === 'discount').amount, '−฿10.00');
 });

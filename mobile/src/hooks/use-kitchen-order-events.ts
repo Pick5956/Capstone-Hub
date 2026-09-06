@@ -1,5 +1,5 @@
 import { fetch as expoFetch } from 'expo/fetch';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { apiUrl } from '@/src/api/client';
@@ -14,6 +14,14 @@ type KitchenOrderEventsOptions = {
   enabled?: boolean;
   restaurantId?: number | null;
 };
+
+/**
+ * `live` once the server has greeted the stream, `offline` after it drops and
+ * while the backoff waits, `idle` when nothing is listening - the screen is not
+ * focused, or there is no restaurant yet - so a paused stream is never reported
+ * to the kitchen as a fault.
+ */
+export type KitchenRealtimeStatus = 'idle' | 'connecting' | 'live' | 'offline';
 
 const maxRetryDelayMs = 30_000;
 const refreshDebounceMs = 100;
@@ -31,13 +39,26 @@ export function useKitchenOrderEvents(
   { enabled = true, restaurantId }: KitchenOrderEventsOptions = {},
 ) {
   const callbackRef = useRef(callback);
+  const [status, setStatus] = useState<KitchenRealtimeStatus>('idle');
+  // Written through a ref as well so the async connection loop can report
+  // without being re-created whenever the status changes.
+  const statusRef = useRef<KitchenRealtimeStatus>('idle');
+  const reportStatus = useCallback((next: KitchenRealtimeStatus) => {
+    if (statusRef.current === next) return;
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
 
   useEffect(() => {
     callbackRef.current = callback;
   }, [callback]);
 
   useEffect(() => {
-    if (!enabled || !restaurantId) return;
+    if (!enabled || !restaurantId) {
+      reportStatus('idle');
+      return;
+    }
+    reportStatus('connecting');
 
     let disposed = false;
     let appIsActive = isActiveAppState(AppState.currentState);
@@ -124,6 +145,7 @@ export function useKitchenOrderEvents(
 
             for (const message of parsed.messages) {
               if (message.event === 'connected') {
+                reportStatus('live');
                 queueRefresh();
                 continue;
               }
@@ -149,6 +171,8 @@ export function useKitchenOrderEvents(
     const run = async () => {
       while (!disposed) {
         if (!appIsActive) {
+          // Backgrounded, not broken: the queue is simply not being watched.
+          reportStatus('idle');
           await waitBeforeRetry(maxRetryDelayMs);
           continue;
         }
@@ -160,9 +184,14 @@ export function useKitchenOrderEvents(
           if (disposed) return;
         }
         if (disposed || !appIsActive) continue;
-        if (outcome === 'rotate') continue;
+        if (outcome === 'rotate') {
+          reportStatus('connecting');
+          continue;
+        }
 
+        reportStatus('offline');
         await waitBeforeRetry(retryDelayMs);
+        reportStatus('connecting');
         retryDelayMs = Math.min(retryDelayMs * 2, maxRetryDelayMs);
       }
     };
@@ -188,6 +217,9 @@ export function useKitchenOrderEvents(
       connectionAbortController?.abort();
       if (refreshTimer !== null) clearTimeout(refreshTimer);
       wakeRetry?.();
+      reportStatus('idle');
     };
-  }, [enabled, restaurantId]);
+  }, [enabled, reportStatus, restaurantId]);
+
+  return status;
 }

@@ -114,15 +114,17 @@ test('mobile chrome does not retain dark neutral background islands', async () =
 });
 
 test('mobile form controls use orange boundaries at rest and focus', async () => {
-  const [uiSource, themeSource, assistantSource] = await Promise.all([
+  // theme.ts used to carry a second `inputStyles` copy of this rule that no
+  // screen ever rendered; it was removed, so the guarantee is asserted on the
+  // components that actually paint a field.
+  const [uiSource, assistantSource] = await Promise.all([
     readFile(path.join(mobileRoot, 'src', 'components', 'ui.tsx'), 'utf8'),
-    readFile(path.join(mobileRoot, 'src', 'theme.ts'), 'utf8'),
     readFile(path.join(mobileRoot, 'app', 'ai-assistant.tsx'), 'utf8'),
   ]);
 
   assert.doesNotMatch(uiSource, /focused\s*\?\s*palette\.textStrong\s*:\s*palette\.border/);
   assert.match(uiSource, /focused\s*\?\s*palette\.primary\s*:\s*palette\.controlBorder/);
-  assert.match(themeSource, /input:[\s\S]{0,180}borderColor:\s*palette\.controlBorder/);
+  assert.match(uiSource, /borderColor:\s*error \? palette\.danger : focused \? palette\.primary : palette\.controlBorder/);
   assert.match(assistantSource, /borderColor:\s*palette\.controlBorder/);
 });
 

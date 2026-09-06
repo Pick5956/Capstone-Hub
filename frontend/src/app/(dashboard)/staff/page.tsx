@@ -903,6 +903,7 @@ export default function StaffPage() {
                           {canEditMemberRole ? (
                             <div>
                               <ThemedSelect
+                                aria-label={copy.role}
                                 className="max-w-full lg:w-full xl:w-[220px]"
                                 value={String(member.role_id)}
                                 onChange={(next) => void changeMemberRole(member.ID, next)}
@@ -1149,7 +1150,7 @@ export default function StaffPage() {
                     placeholder={copy.emailPlaceholder}
                     disabled={!canManageInvites}
                     aria-invalid={Boolean(inviteError)}
-                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-800 ${
+                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 disabled:opacity-60 dark:bg-gray-800 ${
                       inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
                     }`}
                   />
@@ -1161,6 +1162,7 @@ export default function StaffPage() {
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.role}</span>
                   <ThemedSelect
+                    aria-label={copy.role}
                     value={String(roleId || inviteRoles[0]?.ID || "")}
                     onChange={(next) => setRoleId(Number(next))}
                     disabled={!canManageInvites}
@@ -1174,6 +1176,7 @@ export default function StaffPage() {
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.expiry}</span>
                   <ThemedSelect
+                    aria-label={copy.expiry}
                     value={expiresInDays}
                     onChange={setExpiresInDays}
                     disabled={!canManageInvites}
@@ -1249,7 +1252,7 @@ export default function StaffPage() {
                     onChange={(event) => setNewRoleName(event.target.value)}
                     placeholder={copy.roleNamePlaceholder}
                     disabled={!canManageRoles || creatingRole}
-                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                   />
                 </label>
                 <button
@@ -1284,7 +1287,7 @@ export default function StaffPage() {
                       className={`group/card rounded-md border border-gray-200 bg-white p-2.5 outline-none transition-colors dark:border-gray-800 dark:bg-gray-900 ${
                         roleCardDisabled
                           ? "cursor-not-allowed opacity-70"
-                          : "cursor-pointer hover:border-gray-300 hover:bg-gray-50 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                          : "cursor-pointer hover:border-gray-300 hover:bg-gray-50 focus:border-orange-500 dark:hover:border-gray-700 dark:hover:bg-gray-800"
                       }`}
                     >
                       <div className="grid grid-cols-[minmax(0,1fr)_40px] items-center gap-2">
@@ -1338,7 +1341,7 @@ export default function StaffPage() {
                             aria-invalid={Boolean(roleRenameError)}
                             aria-describedby={roleRenameError ? roleRenameErrorId : undefined}
                             disabled={roleDialogPolicy.busy}
-                            className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2.5 text-[14px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2.5 text-[14px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                           />
                           <button
                             type="submit"
@@ -1390,7 +1393,7 @@ export default function StaffPage() {
                             setRoleRenameError("");
                             setEditingRoleName(true);
                           }}
-                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                         >
                           <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
                         </button>

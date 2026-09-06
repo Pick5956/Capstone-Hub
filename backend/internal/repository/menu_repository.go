@@ -56,15 +56,6 @@ func (r *MenuRepository) FindCategoryForUpdate(restaurantID, categoryID uint) (*
 	return &category, nil
 }
 
-func (r *MenuRepository) FindCategoryByName(restaurantID uint, name string) (*entity.Category, error) {
-	var category entity.Category
-	err := r.db.Where("restaurant_id = ? AND name = ?", restaurantID, name).First(&category).Error
-	if err != nil {
-		return nil, err
-	}
-	return &category, nil
-}
-
 // CategoryNameExists reports whether an active category with the same name
 // (case-insensitive) already exists for the restaurant. Pass excludeID to skip
 // the category being updated so renaming it to its own name is allowed.
@@ -114,6 +105,8 @@ func (r *MenuRepository) ListMenuItems(restaurantID uint, includeInactive bool, 
 		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Preload("OptionGroups.Options.Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("OptionGroups.Options.Ingredients.Ingredient").
 		Where("restaurant_id = ?", restaurantID)
 	if !includeInactive {
 		activeCategoryIDs := r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true)
@@ -185,6 +178,8 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Preload("OptionGroups.Options.Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("OptionGroups.Options.Ingredients.Ingredient").
 		Where("restaurant_id = ? AND id = ?", restaurantID, menuItemID).
 		First(&item).Error
 	if err != nil {
@@ -260,6 +255,11 @@ func replaceMenuOptions(tx *gorm.DB, item *entity.MenuItem, groups []entity.Menu
 	if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Find(&existing).Error; err != nil {
 		return err
 	}
+	// Options carry ingredient rows now, so they go first: a leftover row would
+	// point at an option id this replace is about to delete and reuse.
+	if err := tx.Unscoped().Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuOptionIngredient{}).Error; err != nil {
+		return err
+	}
 	for _, group := range existing {
 		if err := tx.Unscoped().Where("restaurant_id = ? AND option_group_id = ?", item.RestaurantID, group.ID).Delete(&entity.MenuOption{}).Error; err != nil {
 			return err
@@ -276,15 +276,36 @@ func replaceMenuOptions(tx *gorm.DB, item *entity.MenuItem, groups []entity.Menu
 		if err := tx.Create(&groups[i]).Error; err != nil {
 			return err
 		}
+		optionIngredients := make([][]entity.MenuOptionIngredient, len(options))
 		for j := range options {
 			options[j].RestaurantID = item.RestaurantID
 			options[j].MenuItemID = item.ID
 			options[j].OptionGroupID = groups[i].ID
+			// Held back so GORM's association autosave cannot insert them before
+			// the option has an id to hang them on.
+			optionIngredients[j] = options[j].Ingredients
+			options[j].Ingredients = nil
 		}
 		if len(options) > 0 {
 			if err := tx.Create(&options).Error; err != nil {
 				return err
 			}
+		}
+		for j := range options {
+			rows := optionIngredients[j]
+			if len(rows) == 0 {
+				continue
+			}
+			for k := range rows {
+				rows[k].RestaurantID = item.RestaurantID
+				rows[k].MenuItemID = item.ID
+				rows[k].OptionGroupID = groups[i].ID
+				rows[k].MenuOptionID = options[j].ID
+			}
+			if err := tx.Create(&rows).Error; err != nil {
+				return err
+			}
+			options[j].Ingredients = rows
 		}
 	}
 	return nil

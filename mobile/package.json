@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@finan-me/react-native-thermal-printer": "^1.0.9",
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
@@ -20,6 +21,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-fs": "^2.20.0",
     "react-native-nitro-google-signin": "1.1.0",
     "react-native-nitro-modules": "^0.36.3",
     "react-native-safe-area-context": "~5.6.2",
@@ -41,7 +43,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/ai-actions.test.mjs src/lib/ai-conversation.test.mjs src/lib/ai-response.test.mjs src/lib/app-font.test.mjs src/lib/app-shell-runtime.test.mjs src/lib/auth-state.test.mjs src/lib/auth-validation.test.mjs src/lib/brand-assets.test.mjs src/lib/display-preferences.test.mjs src/lib/format.test.mjs src/lib/google-sign-in-flow.test.mjs src/lib/home-dashboard.test.mjs src/lib/inventory-form.test.mjs src/lib/menu-editor.test.mjs src/lib/navigation-runtime.test.mjs src/lib/order-detail-runtime.test.mjs src/lib/orientation-lock.test.mjs src/lib/order-query.test.mjs src/lib/order-workflow.test.mjs src/lib/permission-parity.test.mjs src/lib/public-web-url.test.mjs src/lib/receipt.test.mjs src/lib/registration-flow.test.mjs src/lib/report-query.test.mjs src/lib/restaurant-settings.test.mjs src/lib/restaurant-types.test.mjs src/lib/session-runtime.test.mjs src/lib/staff-workflow.test.mjs src/lib/table-workflow.test.mjs src/lib/work-mode.test.mjs src/storage/session-store.web.test.mjs",
+    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/ai-actions.test.mjs src/lib/ai-conversation.test.mjs src/lib/ai-response.test.mjs src/lib/app-font.test.mjs src/lib/app-shell-runtime.test.mjs src/lib/auth-state.test.mjs src/lib/auth-validation.test.mjs src/lib/brand-assets.test.mjs src/lib/display-preferences.test.mjs src/lib/format.test.mjs src/lib/google-sign-in-flow.test.mjs src/lib/home-dashboard.test.mjs src/lib/inventory-form.test.mjs src/lib/kitchen-workflow.test.mjs src/lib/menu-editor.test.mjs src/lib/navigation-runtime.test.mjs src/lib/order-detail-runtime.test.mjs src/lib/orientation-lock.test.mjs src/lib/order-query.test.mjs src/lib/order-workflow.test.mjs src/lib/permission-parity.test.mjs src/lib/printer.test.mjs src/lib/public-web-url.test.mjs src/lib/receipt.test.mjs src/lib/registration-flow.test.mjs src/lib/report-query.test.mjs src/lib/restaurant-settings.test.mjs src/lib/restaurant-types.test.mjs src/lib/session-runtime.test.mjs src/lib/staff-workflow.test.mjs src/lib/table-workflow.test.mjs src/lib/toast-runtime.test.mjs src/lib/work-mode.test.mjs src/storage/session-store.web.test.mjs",
     "typecheck": "tsc --noEmit",
     "tunnel:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-tunnel.ps1"
   },

@@ -228,50 +228,43 @@ test('legacy manager fallback includes the backend expense permission', () => {
   assert.equal(can(membership, 'manage_expenses'), true);
 });
 
-test('order navigation stays available for active order recovery without exposing archive queries', () => {
+test('both order permissions open the same paid archive, as they do on the web', () => {
   assert.deepEqual(orderRoutePermissions, ['view_orders', 'take_order']);
-  assert.equal(orderListAccess(false, true), 'operational');
-  assert.deepEqual(
-    orderListRequest('operational', {
-      status: 'completed',
-      search: 'old receipt',
-      page: 2,
-      limit: 25,
-    }),
-    {
-      status: 'active',
-      page: 2,
-      limit: 25,
-    },
-  );
-});
-
-test('order archive filters, search, and summaries remain exclusive to view_orders', () => {
   assert.equal(orderListAccess(true, false), 'archive');
+  assert.equal(orderListAccess(false, true), 'archive');
   assert.equal(orderListAccess(true, true), 'archive');
   assert.equal(orderListAccess(false, false), 'denied');
+});
+
+test('the archive asks for paid orders only, never a status filter', () => {
   assert.deepEqual(
     orderListRequest('archive', {
-      status: 'completed',
       search: ' OR-42 ',
       page: 3,
       limit: 25,
     }),
     {
-      status: 'completed',
+      payment_status: 'paid',
       search: 'OR-42',
-      include_summary: true,
       page: 3,
       limit: 25,
     },
   );
-  assert.equal(
-    orderListRequest('denied', {
-      page: 1,
-      limit: 25,
-    }),
-    null,
+});
+
+test('an empty search is sent as an empty string rather than a stray filter', () => {
+  assert.deepEqual(
+    orderListRequest('archive', { page: 1, limit: 25 }),
+    { payment_status: 'paid', search: '', page: 1, limit: 25 },
   );
+  assert.deepEqual(
+    orderListRequest('archive', { search: '   ', page: 1, limit: 25 }),
+    { payment_status: 'paid', search: '', page: 1, limit: 25 },
+  );
+});
+
+test('no permission means no request at all', () => {
+  assert.equal(orderListRequest('denied', { page: 1, limit: 25 }), null);
 });
 
 test('positive route IDs distinguish an omitted create-mode ID from a malformed ID', () => {

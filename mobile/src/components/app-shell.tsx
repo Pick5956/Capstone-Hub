@@ -75,7 +75,6 @@ const managementNavigation: NavItem[] = [
   { key: 'menu', label: 'เมนูอาหาร', labelEn: 'Menu', shortLabel: 'เมนู', shortLabelEn: 'Menu', href: '/menu', icon: 'book-outline', activeIcon: 'book', permission: 'view_menu', fallbackPermission: 'manage_menu' },
   { key: 'inventory', label: 'คลังวัตถุดิบ', labelEn: 'Inventory', shortLabel: 'คลัง', shortLabelEn: 'Stock', href: '/inventory', icon: 'cube-outline', activeIcon: 'cube', permission: 'view_inventory', fallbackPermission: 'manage_inventory' },
   { key: 'tables-manage', label: 'จัดการโต๊ะ', labelEn: 'Table management', shortLabel: 'โต๊ะ', shortLabelEn: 'Tables', href: '/table-management', icon: 'grid-outline', activeIcon: 'grid', permission: 'view_tables', fallbackPermission: 'manage_table' },
-  { key: 'reservations', label: 'ประวัติการจอง', labelEn: 'Reservations', shortLabel: 'การจอง', shortLabelEn: 'Bookings', href: '/reservations', icon: 'calendar-outline', activeIcon: 'calendar', permissions: ['view_tables', 'manage_table', 'take_order'] },
   { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', icon: 'people-outline', activeIcon: 'people', permissions: ['manage_invites', 'manage_members', 'manage_roles', 'view_audit_log'] },
   { key: 'reports', label: 'รายงาน', labelEn: 'Reports', shortLabel: 'รายงาน', shortLabelEn: 'Reports', href: '/reports', icon: 'bar-chart-outline', activeIcon: 'bar-chart', permission: 'view_reports' },
   { key: 'expenses', label: 'ค่าใช้จ่าย', labelEn: 'Expenses', shortLabel: 'ค่าใช้จ่าย', shortLabelEn: 'Expenses', href: '/expenses', icon: 'cash-outline', activeIcon: 'cash', permissions: ['manage_expenses', 'view_reports'] },
@@ -388,11 +387,20 @@ export function PrimaryPhoneNavigation({
   );
 }
 
+// Android renders a scroll view's refreshControl as the OUTER element, cloning it
+// with the scroll view injected as children:
+//   cloneElement(refreshControl, { style }, <ScrollView>...</ScrollView>)
+// So this wrapper has to pass whatever it is handed straight through - dropping
+// `children` drops the entire screen, which is what left every tab that pulls to
+// refresh blank on Android while /more (the one screen with no refreshControl)
+// still rendered. iOS puts the control inside the scroll view instead, so it
+// never needed the forwarding and never showed the bug.
 export function AppRefreshControl({
   onRefresh,
+  ...rest
 }: {
   onRefresh: () => void | Promise<void>;
-}) {
+} & Omit<React.ComponentProps<typeof RefreshControl>, 'onRefresh' | 'refreshing'>) {
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -415,6 +423,7 @@ export function AppRefreshControl({
 
   return (
     <RefreshControl
+      {...rest}
       colors={[palette.accent]}
       onRefresh={refresh}
       progressBackgroundColor={palette.surface}

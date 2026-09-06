@@ -4,32 +4,25 @@ import test from 'node:test';
 import {
   DEFAULT_DISPLAY_PREFERENCES,
   normalizeDisplayPreferences,
-  scaleTextMetric,
-  textSizeMultiplier,
 } from './display-preferences.ts';
 
 test('normalizes supported display preferences', () => {
-  assert.deepEqual(
-    normalizeDisplayPreferences({ language: 'en', textSize: 'large' }),
-    { language: 'en', textSize: 'large' },
-  );
+  assert.deepEqual(normalizeDisplayPreferences({ language: 'en' }), { language: 'en' });
 });
 
 test('falls back safely when persisted display preferences are malformed', () => {
   assert.deepEqual(
-    normalizeDisplayPreferences({ language: 'jp', textSize: 'huge' }),
+    normalizeDisplayPreferences({ language: 'jp' }),
     DEFAULT_DISPLAY_PREFERENCES,
   );
-  assert.deepEqual(
-    normalizeDisplayPreferences(null),
-    DEFAULT_DISPLAY_PREFERENCES,
-  );
+  assert.deepEqual(normalizeDisplayPreferences(null), DEFAULT_DISPLAY_PREFERENCES);
 });
 
-test('maps every text size to a stable multiplier and rounded metric', () => {
-  assert.equal(textSizeMultiplier('small'), 0.9);
-  assert.equal(textSizeMultiplier('normal'), 1);
-  assert.equal(textSizeMultiplier('large'), 1.12);
-  assert.equal(textSizeMultiplier('extra-large'), 1.25);
-  assert.equal(scaleTextMetric(15, 'large'), 16.8);
+test('drops a persisted text size instead of carrying it forward', () => {
+  // Older installs stored textSize. Normalizing must not resurrect the field,
+  // or a stale value would travel through every future write.
+  assert.deepEqual(
+    normalizeDisplayPreferences({ language: 'en', textSize: 'extra-large' }),
+    { language: 'en' },
+  );
 });

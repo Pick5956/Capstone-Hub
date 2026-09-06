@@ -104,14 +104,24 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// still on an AI-owned table outside the frozen registry.
 		18: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 		// Version 19 widens the same CHECK once more (recording an expense).
-		19: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
-		// Version 20 adds latency_ms to AI conversation turns — how long the
-		// owner waited for each answer — so the registry moves with it.
-		20: "1d46fef8248ae39fbde5a15d9ef9a06d98bbddfaeb5203ecc990039372173453",
-		// Version 21 adds the owner's AI preferences to Restaurant (per-action
-		// switches, bell kinds, what the assistant calls them), so the registry
-		// moves with it.
-		21: "4f5d0727c7211140f4d3c5c9341f978ca5d78e24237d70bdceaee4d41dd95fe2",
+		//
+		// The hash then moved without the database moving: Ingredient gained
+		// UnitFamily, a `gorm:"-"` field computed at read time to tell a client
+		// which units it accepts. This fingerprint hashes every field, ignored
+		// ones included, so a read-time field trips the gate even though it adds
+		// no column and needs no migration. Reviewed and accepted on that basis -
+		// CurrentSchemaVersion stays 19 because the schema itself is unchanged.
+		19: "a2af463275584e4b9967d5cf758e96eb36661566ee360098420413465d5d1902",
+		// Version 20 adds menu_option_ingredients: the ingredients one option
+		// consumes on top of (or instead of) the dish recipe. A genuinely new
+		// table in the baseline registry, so the fingerprint advances.
+		20: "29c7a5867b20aedf28b9f9f2431fd3f1d6bb2ade636f827885728f8602da79f6",
+		// Versions 21 (latency_ms on AI conversation turns) and 22 (the owner's
+		// AI preferences on Restaurant) arrived together in one merge, renumbered
+		// from 20/21 on the assistant branch; the registry was never frozen
+		// between them, so both carry the merged registry's hash.
+		21: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
+		22: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

@@ -72,7 +72,10 @@ export default function MenuItemEditorScreen() {
       if (item) {
         setName(item.name); setPrice(String(item.price)); setDescription(item.description || ''); setImageUrl(item.image_url || ''); setDisplayOrder(String(item.display_order)); setAvailable(item.is_available ? 'yes' : 'no');
         setCategoryIds(initialMenuCategoryIds(item, categoryResponse.categories || []));
-        setOptionGroups(menuOptionGroupDrafts((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active })) }))));
+        // Option ingredient links are authored on the web only, but they are read
+        // here and posted back untouched. A save replaces the whole option
+        // aggregate, so dropping them on the way in deletes them on the way out.
+        setOptionGroups(menuOptionGroupDrafts((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active, ingredients: (option.ingredients || []).map((row) => ({ ingredient_id: row.ingredient_id, direction: row.direction, quantity: row.quantity, unit: row.unit })) })) }))));
         setIngredients(menuIngredientDrafts((item.ingredients || []).map((ingredient) => ({ ingredient_id: ingredient.ingredient_id, quantity: ingredient.quantity, unit: ingredient.unit, note: ingredient.note }))));
         setItemExists(true);
       } else if (!editing) {
@@ -234,9 +237,6 @@ export default function MenuItemEditorScreen() {
         <View style={{ flex: 1, minWidth: 140 }}>
           <TextField icon="cash-outline" label={copy('ราคา', 'Price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
         </View>
-        <View style={{ flex: 1, minWidth: 140 }}>
-          <TextField icon="reorder-three-outline" label={copy('ลำดับ', 'Display order')} value={displayOrder} onChangeText={setDisplayOrder} keyboardType="number-pad" />
-        </View>
       </View>
       <Divider />
       <View style={{ gap: spacing.sm }}>
@@ -265,15 +265,6 @@ export default function MenuItemEditorScreen() {
       </View>
       <Divider />
       <TextField icon="document-text-outline" label={copy('คำอธิบาย', 'Description')} value={description} onChangeText={setDescription} multiline />
-      <ChipGroup
-        label={copy('สถานะขาย', 'Availability')}
-        value={available}
-        onChange={setAvailable}
-        options={[
-          { label: copy('พร้อมขาย', 'Available'), value: 'yes' },
-          { label: copy('ปิดขาย', 'Unavailable'), value: 'no' },
-        ]}
-      />
       <View style={{ gap: spacing.sm }}>
         <Text style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>{copy('หมวดเมนู', 'Menu categories')}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
@@ -367,15 +358,6 @@ export default function MenuItemEditorScreen() {
                   </View>
                   <TextField label={copy('ชื่อ', 'Name')} value={option.name} onChangeText={(value) => updateOption(groupIndex, optionIndex, { name: value })} error={optionNameIssue ? optionIssueMessage(optionNameIssue.code) : undefined} />
                   <TextField label={copy('ราคาเพิ่ม', 'Additional price')} value={option.price_delta} onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: value })} keyboardType="decimal-pad" error={optionPriceIssue ? optionIssueMessage(optionPriceIssue.code) : undefined} />
-                  <ChipGroup
-                    label={copy('ค่าเริ่มต้น', 'Default selection')}
-                    value={option.is_default ? 'yes' : 'no'}
-                    onChange={(value) => updateOption(groupIndex, optionIndex, { is_default: value === 'yes' })}
-                    options={[
-                      { label: copy('ไม่เลือก', 'Not selected'), value: 'no' },
-                      { label: copy('เลือกไว้', 'Selected'), value: 'yes' },
-                    ]}
-                  />
                 </View>
               );
             })}

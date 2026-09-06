@@ -484,13 +484,6 @@ func normalizedStructuredPlannerKeys(keys []string) []string {
 	return normalized
 }
 
-func structuredPlannerModel(environmentName string, fallback string) string {
-	if configured := strings.TrimSpace(os.Getenv(environmentName)); configured != "" {
-		return configured
-	}
-	return fallback
-}
-
 // structuredPlannerModelChain resolves the planner model from the most specific
 // setting to the least: a planner-only override, then the model the rest of the
 // assistant already uses, then the built-in default. This keeps one model
@@ -540,14 +533,40 @@ func (e *structuredPlannerProviderHTTPError) Error() string {
 
 func (e *structuredPlannerProviderHTTPError) Unwrap() error { return e.Cause }
 
+// structuredPlannerShouldTryNextKey reports whether a failure is this key's
+// fault rather than the request's, so the rotation should move on to the next
+// key instead of giving up.
+//
+// It has to match *aiProviderHTTPError, because that is the type that actually
+// arrives. Both provider paths classify their responses through
+// classifyProviderResponse (ai_provider_health.go), which returns
+// *rateLimitedError for 429, model-unavailable for 404, and *aiProviderHTTPError
+// for everything else - 401 and 403 included. This used to look only for
+// *structuredPlannerProviderHTTPError, which nothing constructs outside a helper
+// that is itself unreachable, so it always returned false: a single revoked key
+// ended the rotation and the remaining keys were never tried, surfacing as
+// "exhausted configured API keys" after one attempt.
+//
+// 429 never reaches here - runPlannerKeyRotation handles errRateLimit first and
+// parks the key - but it stays listed so the predicate is correct on its own.
 func structuredPlannerShouldTryNextKey(err error) bool {
-	var statusErr *structuredPlannerProviderHTTPError
-	if !errors.As(err, &statusErr) {
-		return false
+	var plannerErr *structuredPlannerProviderHTTPError
+	if errors.As(err, &plannerErr) {
+		return keyScopedProviderStatus(plannerErr.StatusCode)
 	}
-	return statusErr.StatusCode == http.StatusUnauthorized ||
-		statusErr.StatusCode == http.StatusForbidden ||
-		statusErr.StatusCode == http.StatusTooManyRequests
+	var providerErr *aiProviderHTTPError
+	if errors.As(err, &providerErr) {
+		return keyScopedProviderStatus(providerErr.StatusCode)
+	}
+	return false
+}
+
+// keyScopedProviderStatus is true for the statuses that another key could
+// plausibly answer differently.
+func keyScopedProviderStatus(statusCode int) bool {
+	return statusCode == http.StatusUnauthorized ||
+		statusCode == http.StatusForbidden ||
+		statusCode == http.StatusTooManyRequests
 }
 
 // Gemini supports a deliberate subset of JSON Schema. The backend still runs

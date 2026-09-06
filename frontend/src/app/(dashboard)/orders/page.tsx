@@ -243,7 +243,7 @@ export default function OrdersPage() {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={copy.search}
                 aria-label={copy.search}
-                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-7 pr-3 text-[13px] outline-none focus:border-orange-500 dark:bg-gray-800"
               />
             </label>
           </div>

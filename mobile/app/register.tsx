@@ -208,6 +208,7 @@ export default function RegisterScreen() {
                   textContentType="givenName"
                   value={firstName}
                   onChangeText={setFirstName}
+                  maxLength={100}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -218,6 +219,7 @@ export default function RegisterScreen() {
                   textContentType="familyName"
                   value={lastName}
                   onChangeText={setLastName}
+                  maxLength={100}
                 />
               </View>
             </View>
@@ -289,6 +291,7 @@ export default function RegisterScreen() {
                   label={copy('ชื่อเล่น', 'Nickname')}
                   value={nickname}
                   onChangeText={setNickname}
+                  maxLength={100}
                 />
                 <TextField
                   icon="call-outline"
@@ -298,6 +301,7 @@ export default function RegisterScreen() {
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
+                  maxLength={40}
                 />
               </View>
             ) : null}

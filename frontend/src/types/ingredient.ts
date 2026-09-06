@@ -19,6 +19,10 @@ export interface Ingredient {
   category_id?: number | null;
   image_url?: string;
   unit: string;
+  /** Every unit a quantity may be entered in for this ingredient, computed by
+   *  the server from `unit`. Drives the unit picker; the list is authoritative,
+   *  so the client never keeps its own conversion table. */
+  unit_family?: IngredientUnitOption[];
   stock: number;
   min_stock: number;
   cost_per_unit: number;
@@ -98,9 +102,19 @@ export interface IngredientInput {
   storage_type?: string;
 }
 
+/** One entry in a unit picker: a unit this ingredient accepts, and how many of
+ *  its own stock units one of them makes (1 กิโลกรัม = 1000 against a gram shelf). */
+export interface IngredientUnitOption {
+  unit: string;
+  stock_per_unit: number;
+}
+
 export interface AdjustStockInput {
   type: "in" | "out" | "adjust";
   quantity: number;
+  /** Unit the quantity was typed in. Omitted means the ingredient's own unit.
+   *  Any other unit of the same family is converted by the server. */
+  unit?: string;
   note?: string;
   /** What the restock cost. Stock-in only; a positive value writes an expense entry. */
   amount?: number;

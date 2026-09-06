@@ -10,6 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "pro.dishy.restauranthub"
     },
     "android": {
@@ -55,7 +56,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "dbcdb837-2cff-44e4-8b87-f628c77eb8b5"
+      }
     }
   }
 }

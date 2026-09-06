@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -9,9 +9,10 @@ import { formatCurrency } from "@/src/lib/format";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, previewMenuImageBackground, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
 import type { MenuImageUploadOptions } from "@/src/lib/menuImageCrop";
 import { listIngredients } from "@/src/lib/ingredient";
+import { MENU_CARD_GRID_CLASS, MENU_CARD_SHELL_CLASS } from "@/src/lib/menuGrid";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { apiErrorCode } from "@/src/lib/apiErrors";
-import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
+import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput, MenuOptionIngredientInput } from "@/src/types/menu";
 import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
@@ -23,10 +24,12 @@ import {
   AvailabilitySwitch,
   emptyItem,
   emptyOptionGroup,
+  emptyOptionIngredient,
   emptyRecipeComponent,
   menuCategoryIds,
   menuItemToInput,
   recipeCost,
+  stockUnitsPer,
 } from "./menuPageUtils";
 
 type DeleteTarget =
@@ -63,6 +66,9 @@ export default function MenuPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [itemEditorTab, setItemEditorTab] = useState<ItemEditorTab>("basic");
+  // Only one option set is expanded at a time, so the tab stays a list you can
+  // scan rather than a column of open forms.
+  const [openOptionGroup, setOpenOptionGroup] = useState<number | null>(null);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [categoryModalClosing, setCategoryModalClosing] = useState(false);
@@ -81,15 +87,11 @@ export default function MenuPage() {
   const copy = language === "th"
     ? {
         permissionDenied: "ไม่มีสิทธิ์ดูเมนู",
-        eyebrow: "Menu",
         title: "เมนูอาหาร",
-        manageSubtitle: "จัดการหมวดหมู่และเมนูของร้าน",
-        viewSubtitle: "ดูเมนูทั้งหมดแบบ read-only",
         loadError: "โหลดข้อมูลเมนูไม่สำเร็จ",
         categoryRequired: "กรุณากรอกชื่อหมวดหมู่",
         categorySaveError: "บันทึกหมวดหมู่ไม่สำเร็จ",
         categoryDuplicate: "มีหมวดหมู่ชื่อนี้อยู่แล้ว",
-        itemRequired: "กรุณาเลือกหมวดหมู่และกรอกชื่อเมนู",
         itemCategoryRequired: "เลือกหมวดหมู่ก่อนเพิ่มเมนู",
         itemNameRequired: "กรอกชื่อเมนูที่ลูกค้าและพนักงานจำได้",
         itemSaveError: "บันทึกเมนูไม่สำเร็จ",
@@ -109,55 +111,32 @@ export default function MenuPage() {
         imageTypeError: "กรุณาเลือกไฟล์รูปภาพ",
         imageUploadError: "อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB",
         allCategories: "ทุกหมวดหมู่",
-        catalogTitle: "รายการเมนู",
-        menuColumn: "เมนู",
-        categoryColumn: "หมวดหมู่",
-        statusColumn: "สถานะ",
-        priceColumn: "ราคา",
-        actionsColumn: "จัดการ",
         menuSummary: "เมนูทั้งหมด",
-        availableSummary: "พร้อมขาย",
-        unavailableSummary: "ปิดขาย",
         categoryManager: "จัดหมวดหมู่",
-        editorTitle: "จัดการเมนู",
-        editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
-        categoryHint: "จัดกลุ่มเมนูให้พนักงานหาเจอเร็ว",
         searchPlaceholder: "ค้นหาเมนู",
-        uncategorized: "ไม่ระบุหมวด",
-        noDescription: "ไม่มีรายละเอียด",
         available: "พร้อมขาย",
         unavailable: "ปิดขาย",
-        edit: "แก้ไข",
         delete: "ลบ",
         noMenuTitle: "ยังไม่มีเมนู",
         noMenuManage: "สร้างหมวดหมู่และเพิ่มเมนูแรกจากแผงด้านขวา",
         noMenuView: "เจ้าของร้านยังไม่ได้เปิดเมนูให้ดู",
-        categories: "หมวดหมู่",
         noCategories: "ยังไม่มีหมวดหมู่",
         editCategory: "แก้หมวดหมู่",
         addCategory: "เพิ่มหมวดหมู่",
-        categoryName: "ชื่อหมวดหมู่",
         categoryPlaceholder: "เช่น อาหารจานเดียว / เครื่องดื่ม",
-        categoryOrder: "ลำดับแสดงผลของหมวดหมู่",
-        categoryOrderPlaceholder: "เช่น 1",
-        categoryOrderHelp: "เลขน้อยจะแสดงก่อน ถ้าไม่แน่ใจใส่ 0 ได้",
         saveCategory: "บันทึกหมวดหมู่",
         createCategory: "เพิ่มหมวดหมู่",
-        editItem: "แก้เมนู",
         addItem: "เพิ่มเมนู",
-        itemCategory: "หมวดหมู่เมนู",
         itemCategories: "หมวดหมู่เมนู",
-        addInlineCategory: "สร้างหมวดใหม่",
         inlineCategoryPlaceholder: "ชื่อหมวดใหม่",
-        noCategorySelected: "เลือกอย่างน้อย 1 หมวด",
+        noCategory: "ไม่มีหมวด",
         createCategoryFirst: "สร้างหมวดหมู่ก่อนเพิ่มเมนู",
-        createCategoryHint: "เพิ่มหมวดหมู่ เช่น อาหารจานเดียว / เครื่องดื่ม ก่อน แล้วค่อยเพิ่มเมนูในหมวดนั้น",
+        noCategoryPicked: "เมนูนี้ยังไม่ได้อยู่หมวดไหน",
+        addCategoryPlaceholder: "เพิ่มเข้าหมวด...",
         itemName: "ชื่อเมนู",
         itemNamePlaceholder: "เช่น ข้าวกะเพราหมูสับ",
         price: "ราคาเมนู (บาท)",
         pricePlaceholder: "เช่น 65",
-        itemOrder: "ลำดับแสดงผลของเมนู",
-        itemOrderHelp: "เลขน้อยจะแสดงก่อนในหมวดหมู่นั้น ถ้าไม่แน่ใจเว้นว่างได้",
         image: "รูปเมนู",
         chooseImage: "เลือกรูป",
         adjustImage: "ปรับตำแหน่งรูป",
@@ -188,27 +167,28 @@ export default function MenuPage() {
         imageHelp: "รองรับ jpg, png, webp ไม่เกิน 5MB",
         description: "รายละเอียดเมนู",
         descriptionPlaceholder: "เช่น เผ็ดน้อยได้ เพิ่มไข่ดาวได้",
-        availableInStaffView: "พร้อมขายในหน้าพนักงาน",
         saveItem: "บันทึกเมนู",
         createItem: "เพิ่มเมนู",
-        cancelEdit: "ยกเลิกการแก้ไข",
         imageAlt: "รูปเมนู",
-        optionsTitle: "ตัวเลือกเมนู",
-        optionsHint: "เช่น ระดับความสุก ซอส ท็อปปิง หรือพิเศษ",
+        optionsTitle: "ตัวเลือกที่ลูกค้าเลือกได้",
+        optionsEmptyTitle: "เมนูนี้ยังไม่มีตัวเลือก",
+        groupNameLabel: "ชื่อชุด",
+        noChoicesYet: "ยังไม่มีตัวเลือก",
+        stockHead: "วัตถุดิบ",
+        addOptionIngredient: "ผูกวัตถุดิบกับตัวเลือกนี้",
+        countLabel: "เลือกได้มากสุด",
+        minLabel: "ต้องเลือกอย่างน้อย",
+        answerRequired: "ต้องเลือก",
+        optionNameHead: "ชื่อตัวเลือก",
+        optionPriceHead: "บวกเพิ่ม ฿",
         addOptionGroup: "เพิ่มชุดตัวเลือก",
-        optionGroupName: "ชื่อชุดตัวเลือก",
         optionGroupPlaceholder: "เช่น ระดับความสุก",
-        requiredOption: "ต้องเลือก",
-        maxSelect: "เลือกได้สูงสุด",
-        optionName: "ชื่อตัวเลือก",
         optionNamePlaceholder: "เช่น สุกปานกลาง",
-        optionPrice: "ราคาเพิ่ม",
         addOption: "เพิ่มตัวเลือก",
         removeOptionGroup: "ลบชุด",
         removeOption: "ลบ",
         optionError: "กรอกชื่อชุดตัวเลือกและอย่างน้อย 1 ตัวเลือก หรือปล่อยว่างทั้งชุด",
         recipeTitle: "สูตรวัตถุดิบ",
-        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกเมื่อครัวทำเสร็จ",
         addRecipeComponent: "เพิ่มวัตถุดิบ",
         ingredient: "วัตถุดิบ",
         quantity: "จำนวน",
@@ -220,15 +200,11 @@ export default function MenuPage() {
       }
     : {
         permissionDenied: "You do not have permission to view the menu.",
-        eyebrow: "Menu",
         title: "Food menu",
-        manageSubtitle: "Manage the restaurant's categories and menu items.",
-        viewSubtitle: "View the full menu in read-only mode.",
         loadError: "Could not load menu data.",
         categoryRequired: "Please enter a category name.",
         categorySaveError: "Could not save category.",
         categoryDuplicate: "A category with this name already exists.",
-        itemRequired: "Please choose a category and enter a menu item name.",
         itemCategoryRequired: "Choose a category before adding a menu item.",
         itemNameRequired: "Enter a menu item name your team can recognize.",
         itemSaveError: "Could not save menu item.",
@@ -248,55 +224,32 @@ export default function MenuPage() {
         imageTypeError: "Please choose an image file.",
         imageUploadError: "Could not upload image. Use jpg, png, or webp up to 5MB.",
         allCategories: "All categories",
-        catalogTitle: "Menu catalog",
-        menuColumn: "Item",
-        categoryColumn: "Category",
-        statusColumn: "Status",
-        priceColumn: "Price",
-        actionsColumn: "Actions",
         menuSummary: "Total items",
-        availableSummary: "Available",
-        unavailableSummary: "Unavailable",
         categoryManager: "Manage categories",
-        editorTitle: "Menu editor",
-        editorHint: "Add a new item or edit the selected menu item.",
-        categoryHint: "Group items so staff can find them quickly.",
         searchPlaceholder: "Search menu",
-        uncategorized: "Uncategorized",
-        noDescription: "No description",
         available: "Available",
         unavailable: "Unavailable",
-        edit: "Edit",
         delete: "Delete",
         noMenuTitle: "No menu items yet",
         noMenuManage: "Create a category and add the first menu item from the right panel.",
         noMenuView: "The owner has not made menu items visible yet.",
-        categories: "Categories",
         noCategories: "No categories yet",
         editCategory: "Edit category",
         addCategory: "Add category",
-        categoryName: "Category name",
         categoryPlaceholder: "For example, Main dishes / Drinks",
-        categoryOrder: "Category display order",
-        categoryOrderPlaceholder: "For example, 1",
-        categoryOrderHelp: "Lower numbers appear first. Use 0 if you are not sure.",
         saveCategory: "Save category",
         createCategory: "Add category",
-        editItem: "Edit menu item",
         addItem: "Add menu item",
-        itemCategory: "Menu category",
         itemCategories: "Menu categories",
-        addInlineCategory: "Create category",
         inlineCategoryPlaceholder: "New category name",
-        noCategorySelected: "Choose at least 1 category",
+        noCategory: "No category",
         createCategoryFirst: "Create a category before adding a menu item",
-        createCategoryHint: "Add a category such as Main dishes or Drinks first, then add menu items to it.",
+        noCategoryPicked: "This dish is not in any category yet",
+        addCategoryPlaceholder: "Add to a category...",
         itemName: "Menu item name",
         itemNamePlaceholder: "For example, Basil pork with rice",
         price: "Price (THB)",
         pricePlaceholder: "For example, 65",
-        itemOrder: "Menu item display order",
-        itemOrderHelp: "Lower numbers appear first inside this category. Leave blank if you are not sure.",
         image: "Menu image",
         chooseImage: "Choose image",
         adjustImage: "Adjust image",
@@ -327,27 +280,28 @@ export default function MenuPage() {
         imageHelp: "Supports jpg, png, webp up to 5MB",
         description: "Menu description",
         descriptionPlaceholder: "For example, mild spice available, add fried egg",
-        availableInStaffView: "Available in staff view",
         saveItem: "Save menu item",
         createItem: "Add menu item",
-        cancelEdit: "Cancel edit",
         imageAlt: "Menu image",
-        optionsTitle: "Menu options",
-        optionsHint: "For doneness, sauces, toppings, or special size.",
+        optionsTitle: "Choices the customer can pick",
+        optionsEmptyTitle: "This dish has no choices yet",
+        groupNameLabel: "Set name",
+        noChoicesYet: "No choices yet",
+        stockHead: "Stock",
+        addOptionIngredient: "Link an ingredient to this choice",
+        countLabel: "Most that can be picked",
+        minLabel: "Fewest that must be picked",
+        answerRequired: "Must pick",
+        optionNameHead: "Choice name",
+        optionPriceHead: "Adds ฿",
         addOptionGroup: "Add option group",
-        optionGroupName: "Option group name",
         optionGroupPlaceholder: "For example, Doneness",
-        requiredOption: "Required",
-        maxSelect: "Max choices",
-        optionName: "Option name",
         optionNamePlaceholder: "For example, Medium",
-        optionPrice: "Extra price",
         addOption: "Add option",
         removeOptionGroup: "Remove group",
         removeOption: "Remove",
         optionError: "Enter an option group name and at least 1 option, or leave the group empty.",
         recipeTitle: "Recipe ingredients",
-        recipeHint: "Connect this item to stock so kitchen completion deducts inventory and calculates food cost.",
         addRecipeComponent: "Add ingredient",
         ingredient: "Ingredient",
         quantity: "Quantity",
@@ -426,13 +380,23 @@ export default function MenuPage() {
     ...sortedCategories.map((category) => ({ value: String(category.ID), label: category.name })),
   ], [copy.allCategories, sortedCategories]);
 
+  // min_select used to be overwritten with `required ? 1 : 0` on every save.
+  // The editor loads the real value (menuPageUtils hydrates it) and the backend
+  // accepts up to 50, so a group configured as "pick at least 2" silently
+  // collapsed to 1 the next time anyone touched that menu item. Keep the stored
+  // minimum, and only enforce the invariants the backend actually requires:
+  // a required group needs at least 1, an optional one has no floor, and the
+  // minimum can never exceed the maximum.
   const normalizeOptionGroups = (groups: MenuOptionGroupInput[]) =>
     groups
-      .map((group, groupIndex) => ({
+      .map((group, groupIndex) => {
+        const maxSelect = Math.max(1, Number(group.max_select) || 1);
+        const storedMin = Math.max(0, Math.floor(Number(group.min_select) || 0));
+        return {
         ...group,
         name: group.name.trim(),
-        min_select: group.required ? 1 : 0,
-        max_select: Math.max(1, Number(group.max_select) || 1),
+        min_select: group.required ? Math.min(Math.max(storedMin, 1), maxSelect) : 0,
+        max_select: maxSelect,
         display_order: Number(group.display_order) || groupIndex,
         options: group.options
           .map((option, optionIndex) => ({
@@ -440,9 +404,14 @@ export default function MenuPage() {
             name: option.name.trim(),
             price_delta: Number(option.price_delta) || 0,
             display_order: Number(option.display_order) || optionIndex,
+            // A row the owner opened but never filled in must not reach the API:
+            // the backend rejects a zero ingredient id, which would fail the whole
+            // save over a blank line nobody meant to add.
+            ingredients: (option.ingredients ?? []).filter((row) => row.ingredient_id && Number(row.quantity) > 0),
           }))
           .filter((option) => option.name),
-      }))
+        };
+      })
       .filter((group) => group.name || group.options.length);
 
   const validateOptionGroups = (groups: MenuOptionGroupInput[]) => {
@@ -528,13 +497,16 @@ export default function MenuPage() {
         const nextDisplayOrder = editingCategory
           ? editingCategory.display_order
           : Math.max(0, ...categories.map((category) => category.display_order || 0)) + 1;
-        const payload = { name, display_order: nextDisplayOrder, is_active: true };
+        // is_active is a *bool on the API: omitting it leaves the stored value
+        // alone. Sending true on a rename or a reorder silently un-hid any
+        // category that had been switched off.
+        const payload = { name, display_order: nextDisplayOrder };
         if (editingCategory) {
           const res = await updateCategory(editingCategory.ID, payload);
           setCategories((current) => current.map((cat) => cat.ID === res.data.ID ? res.data : cat));
           showToast({ title: copy.categoryUpdated });
         } else {
-          const res = await createCategory(payload);
+          const res = await createCategory({ ...payload, is_active: true });
           setCategories((current) => [...current, res.data]);
           if (!itemForm.category_id && !itemForm.category_ids?.length) setItemForm((current) => ({ ...current, category_id: res.data.ID, category_ids: [res.data.ID] }));
           showToast({ title: copy.categoryCreated });
@@ -638,7 +610,6 @@ export default function MenuPage() {
       await Promise.all(normalized.map((category) => updateCategory(category.ID, {
         name: category.name,
         display_order: category.display_order,
-        is_active: true,
       })));
       showToast({ title: copy.orderUpdated });
     } catch {
@@ -742,6 +713,22 @@ export default function MenuPage() {
     updateOptionGroups((groups) => groups.map((group, index) => index === groupIndex ? { ...group, ...patch } : group));
   };
 
+  const updateOptionIngredients = (
+    groupIndex: number,
+    optionIndex: number,
+    updater: (rows: MenuOptionIngredientInput[]) => MenuOptionIngredientInput[],
+  ) => {
+    updateOptionGroups((groups) => groups.map((group, index) => {
+      if (index !== groupIndex) return group;
+      return {
+        ...group,
+        options: group.options.map((option, currentOptionIndex) => currentOptionIndex === optionIndex
+          ? { ...option, ingredients: updater(option.ingredients ?? []) }
+          : option),
+      };
+    }));
+  };
+
   const updateOption = (groupIndex: number, optionIndex: number, patch: Partial<MenuOptionGroupInput["options"][number]>) => {
     updateOptionGroups((groups) => groups.map((group, index) => {
       if (index !== groupIndex) return group;
@@ -834,20 +821,22 @@ export default function MenuPage() {
       >
         <h1 className="sr-only">{copy.title}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
-                  <label className="relative block w-full sm:w-[336px]">
+                  <label className="relative block w-full min-w-0 sm:w-80">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
                     <input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder={copy.searchPlaceholder}
                       aria-label={copy.searchPlaceholder}
-                      className="h-9 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+                      className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white pl-7 pr-3 text-[15px] outline-none focus:border-orange-500 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] placeholder:text-[15px] dark:bg-gray-800"
                     />
                   </label>
-                  <div className="w-full sm:w-52">
+                  <div className="w-full sm:w-40">
                     <ThemedSelect
+                      triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]"
+                      aria-label={copy.allCategories}
                       value={String(filterCategory)}
                       onChange={(next) => setFilterCategory(Number(next))}
                       options={categoryFilterOptions}
@@ -856,10 +845,10 @@ export default function MenuPage() {
                 </div>
                 {canManage ? (
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
+                    <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="ui-press h-10 rounded-xl border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
                       {copy.categoryManager}
                     </button>
-                    <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">
+                    <button type="button" onClick={startCreateItem} className="ui-press h-10 rounded-xl bg-orange-700 px-3 text-[13px] font-semibold text-white shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-orange-800 dark:bg-orange-700 dark:text-white">
                       + {copy.createItem}
                     </button>
                   </div>
@@ -872,16 +861,14 @@ export default function MenuPage() {
         {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
         <div>
           <section className="space-y-4">
-            <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <div className="p-4">
               {loading ? (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className={MENU_CARD_GRID_CLASS}>
                   <RestaurantCardSkeleton />
                   <RestaurantCardSkeleton />
                   <RestaurantCardSkeleton />
                 </div>
               ) : filteredItems.length ? (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className={MENU_CARD_GRID_CLASS}>
                   {filteredItems.map((item) => {
                     const availabilityBadgeClassName = item.is_available
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
@@ -898,47 +885,42 @@ export default function MenuPage() {
                         event.preventDefault();
                         editItem(item);
                       } : undefined}
-                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:bg-transparent ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
+                      className={`group ${MENU_CARD_SHELL_CLASS} focus-visible:outline-none ${canManage ? "cursor-pointer active:scale-[0.99] sm:hover:-translate-y-0.5" : ""} ${!item.is_available ? "opacity-60" : ""}`}
                     >
+                      {!item.is_available ? (
+                        <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
+                          {copy.unavailable}
+                        </span>
+                      ) : null}
                       <div
-                        className="aspect-[4/3] w-full bg-transparent bg-cover bg-center"
+                        className="aspect-[4/3] w-full shrink-0 bg-transparent bg-cover bg-center"
                         style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
                       />
                       <div className="flex min-w-0 flex-1 flex-col p-3">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {menuCategoryIds(item).slice(0, 3).map((categoryId) => {
-                            const category = categories.find((cat) => cat.ID === categoryId);
-                            if (!category) return null;
-                            return (
-                              <span key={categoryId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                                {category.name}
-                              </span>
-                            );
-                          })}
-                        </div>
                         {item.ingredients?.length ? (
-                          <p className="mt-1 text-[11px] text-gray-500">
-                            {copy.recipeCost}: {formatCurrency(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients), language, 2)}
+                          <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">
+                            {copy.recipeCost}: <span className="font-mono tabular-nums">{formatCurrency(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients), language, 2)}</span>
                           </p>
                         ) : null}
-                        <div className="mt-auto border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                            {menuCategoryIds(item)
+                              .map((categoryId) => categories.find((cat) => cat.ID === categoryId)?.name)
+                              .filter(Boolean)
+                              .join(", ") || copy.noCategory}
+                          </span>
                           {canManage ? (
-                            <div className="flex items-center justify-between gap-3">
-                              <span className={`truncate text-[11px] font-medium ${item.is_available ? "text-emerald-700 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}>
-                                {item.is_available ? copy.available : copy.unavailable}
-                              </span>
-                              <AvailabilitySwitch
-                                checked={item.is_available}
-                                disabled={availabilitySubmittingId === item.ID}
-                                label={item.is_available ? copy.available : copy.unavailable}
-                                onChange={() => void toggleItemAvailability(item, !item.is_available)}
-                              />
-                            </div>
+                            <AvailabilitySwitch
+                              checked={item.is_available}
+                              disabled={availabilitySubmittingId === item.ID}
+                              label={item.is_available ? copy.available : copy.unavailable}
+                              onChange={() => void toggleItemAvailability(item, !item.is_available)}
+                            />
                           ) : (
-                            <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${availabilityBadgeClassName}`}>
+                            <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-medium ${availabilityBadgeClassName}`}>
                               {item.is_available ? copy.available : copy.unavailable}
                             </span>
                           )}
@@ -949,13 +931,11 @@ export default function MenuPage() {
                   })}
                 </div>
               ) : (
-                <div className="px-4 py-10 text-center">
+                <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-900">
                   <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.noMenuTitle}</p>
                   <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{canManage ? copy.noMenuManage : copy.noMenuView}</p>
                 </div>
               )}
-            </div>
-          </div>
         </section>
 
       </div>
@@ -981,7 +961,7 @@ export default function MenuPage() {
                       event.preventDefault();
                       toggleCategoryEdit(category);
                     }}
-                    className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
+                    className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] ${
                       editingCategory?.ID === category.ID
                         ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"
@@ -1038,7 +1018,7 @@ export default function MenuPage() {
                   }}
                   placeholder={copy.categoryPlaceholder}
                   aria-invalid={Boolean(categoryError)}
-                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
+                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 dark:bg-gray-800 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
                 />
                 <button disabled={submitting} className="ui-press h-10 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
                   {editingCategory ? copy.saveCategory : copy.createCategory}
@@ -1057,17 +1037,28 @@ export default function MenuPage() {
       {drawerOpen && canManage && (
         <>
           <button type="button" aria-label={copy.cancel} {...itemDrawerBackdrop} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
-          <div className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center px-3 pb-3 pt-10 sm:items-center sm:p-6">
-          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-dialog-exit" : "motion-dialog"} pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900`}>
-            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.editorTitle}</p>
-                <h2 className="mt-0.5 truncate text-[16px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
+          {/* Slides in from the right, the same drawer the staff, table and
+              inventory editors use. It is a long form with three tabs, so it
+              belongs beside the list it edits rather than on top of it. */}
+          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col overflow-hidden border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-[16px] font-semibold text-gray-900 dark:text-white">{editingItem ? editingItem.name : copy.addItem}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeItemDrawer}
+                  aria-label={copy.cancel}
+                  className="ui-press grid h-8 w-8 shrink-0 place-items-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
-              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
-            </div>
-            <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800 sm:px-5">
-              <div className="flex gap-2 overflow-x-auto">
+              {/* A segmented control, not three bordered pills: the tabs used to
+                  wear the same orange chip styling as the category selector two
+                  rows below, so navigation and data looked like the same thing. */}
+              <div className="mt-3 inline-flex w-full items-center gap-1 overflow-x-auto rounded-md bg-gray-100 p-1 dark:bg-gray-950/60 sm:w-auto">
                 {([
                   { id: "basic", label: language === "th" ? "ข้อมูลหลัก" : "Basic info" },
                   { id: "options", label: language === "th" ? "ตัวเลือก" : "Options" },
@@ -1076,11 +1067,12 @@ export default function MenuPage() {
                   <button
                     key={tab.id}
                     type="button"
+                    aria-pressed={itemEditorTab === tab.id}
                     onClick={() => setItemEditorTab(tab.id)}
-                    className={`h-9 shrink-0 rounded-md border px-3 text-[12px] font-medium transition-colors ${
+                    className={`ui-press h-8 flex-1 whitespace-nowrap rounded-md px-3 text-[12px] font-semibold transition-colors sm:flex-none ${
                       itemEditorTab === tab.id
-                        ? "border-orange-400 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                        ? "bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white"
+                        : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
                     }`}
                   >
                     {tab.label}
@@ -1088,39 +1080,78 @@ export default function MenuPage() {
                 ))}
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {itemEditorTab === "basic" && (
-                <div className="mx-auto max-w-2xl">
+                <div>
                   <div className="space-y-4">
-                <div className="rounded-md border border-gray-200 dark:border-gray-800">
-                  <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategories}</span>
-                  </div>
-                  <div className="space-y-3 p-3">
-                    {sortedCategories.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {sortedCategories.map((category) => {
-                          const selected = selectedCategoryIds.includes(category.ID);
-                          return (
-                            <button
-                              key={category.ID}
-                              type="button"
-                              onClick={() => toggleSelectedCategory(category.ID)}
-                              className={`inline-flex h-8 items-center rounded-[4px] border px-3 text-[12px] font-medium transition-[background-color,border-color,color,box-shadow] ${
-                                selected
-                                  ? "border-orange-300 bg-orange-50 text-orange-800 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.2)] dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
-                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-gray-800 dark:hover:text-orange-200"
-                              }`}
-                            >
-                              {category.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{copy.createCategoryFirst}</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-start">
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
+                    <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
+                    {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
+                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
+                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" />
+                </label>
+                <section className="border-t border-gray-200 pt-4 dark:border-gray-800">
+                  <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.itemCategories}</p>
+                  <div className="mt-3 space-y-3">
+                    {sortedCategories.length ? (() => {
+                      // Chips show only what is chosen, in the categories' own order.
+                      // Sorting the selected ones to the front made a chip jump the
+                      // instant you tapped it, and a wall of every category never
+                      // scaled past a couple of dozen anyway. Space is now
+                      // proportional to what this dish uses, not to the whole list.
+                      const picked = sortedCategories.filter((category) => selectedCategoryIds.includes(category.ID));
+                      const available = sortedCategories.filter((category) => !selectedCategoryIds.includes(category.ID));
+                      return (
+                        <>
+                          {picked.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {picked.map((category) => (
+                                <span
+                                  key={category.ID}
+                                  className="inline-flex h-8 max-w-[14rem] items-center gap-1 rounded-md border border-orange-600 bg-orange-50 py-0 pl-2.5 pr-1 text-[12px] font-medium text-orange-800 dark:border-orange-700 dark:bg-orange-900/25 dark:text-orange-200"
+                                >
+                                  <span className="truncate">{category.name}</span>
+                                  <button
+                                    type="button"
+                                    aria-label={`${copy.removeOption} ${category.name}`}
+                                    onClick={() => toggleSelectedCategory(category.ID)}
+                                    className="ui-press grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-orange-100 dark:hover:bg-orange-900/50"
+                                  >
+                                    <X className="h-3 w-3" aria-hidden />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.noCategoryPicked}</p>
+                          )}
+                          {available.length ? (
+                            <ThemedSelect
+                              aria-label={copy.addCategoryPlaceholder}
+                              value=""
+                              placeholder={copy.addCategoryPlaceholder}
+                              onChange={(next) => {
+                                const id = Number(next);
+                                if (id) toggleSelectedCategory(id);
+                              }}
+                              options={available.map((category) => ({ value: String(category.ID), label: category.name }))}
+                            />
+                          ) : null}
+                        </>
+                      );
+                    })() : (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.createCategoryFirst}</p>
                     )}
-                    <div className="grid grid-cols-[1fr_auto] gap-2 rounded-md bg-gray-50 p-2 dark:bg-gray-800/70">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                       <input
                         value={inlineCategoryName}
                         onChange={(event) => {
@@ -1134,7 +1165,7 @@ export default function MenuPage() {
                           }
                         }}
                         placeholder={copy.inlineCategoryPlaceholder}
-                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
+                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-900"
                       />
                       <button
                         type="button"
@@ -1149,23 +1180,10 @@ export default function MenuPage() {
                       <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category || inlineCategoryError}</p>
                     )}
                   </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-start">
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
-                    <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
-                    {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
-                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
-                  </label>
-                </div>
-                <div className="rounded-md border border-gray-200 dark:border-gray-800">
-                  <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
-                  </div>
-                  <div className="space-y-2 p-3">
+                </section>
+                <section className="border-t border-gray-200 pt-4 dark:border-gray-800">
+                  <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.image}</p>
+                  <div className="mt-3 space-y-2">
                     <MenuImageCropper
                       currentImageUrl={itemForm.image_url ?? ""}
                       disabled={uploadingImage || submitting}
@@ -1204,92 +1222,343 @@ export default function MenuPage() {
                     />
                     <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-500 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
                   </div>
-                </div>
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
-                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
-                </label>
+                </section>
                   </div>
                 </div>
               )}
               {itemEditorTab === "options" && (
-                <div className="rounded-md border border-gray-200 dark:border-gray-800">
-                  <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <div>
-                      <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.optionsTitle}</p>
-                      <p className="mt-0.5 text-[11px] text-gray-500">{copy.optionsHint}</p>
-                    </div>
-                    <button type="button" onClick={() => updateOptionGroups((groups) => [...groups, emptyOptionGroup()])} className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.optionsTitle}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Open the set that was just created. Adding one and being
+                        // left staring at an unchanged list reads as a broken button.
+                        setOpenOptionGroup((itemForm.option_groups ?? []).length);
+                        updateOptionGroups((groups) => [...groups, emptyOptionGroup()]);
+                      }}
+                      className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 transition-colors hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                    >
                       {copy.addOptionGroup}
                     </button>
                   </div>
-                  <div className="space-y-3 p-3">
-                    {(itemForm.option_groups ?? []).map((group, groupIndex) => (
-                      <div key={groupIndex} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                        <div className="flex items-start justify-between gap-2">
-                          <label className="min-w-0 flex-1">
-                            <span className="mb-1.5 block text-[11px] font-medium text-gray-500">{copy.optionGroupName}</span>
-                            <input value={group.name} onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })} placeholder={copy.optionGroupPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
-                          </label>
-                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.filter((_, index) => index !== groupIndex))} className="mt-6 h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
-                            {copy.removeOptionGroup}
-                          </button>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <label className="flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-[12px] dark:border-gray-800">
-                            <input type="checkbox" checked={group.required} onChange={(event) => updateOptionGroup(groupIndex, { required: event.target.checked, min_select: event.target.checked ? 1 : 0 })} />
-                            {copy.requiredOption}
-                          </label>
-                          <label>
-                            <span className="sr-only">{copy.maxSelect}</span>
-                            <input type="number" min={1} value={group.max_select || 1} onChange={(event) => updateOptionGroup(groupIndex, { max_select: Number(event.target.value) || 1 })} title={copy.maxSelect} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-800" />
-                          </label>
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          {group.options.map((option, optionIndex) => (
-                            <div key={optionIndex} className="grid grid-cols-[1fr_88px_auto] gap-2">
-                              <input value={option.name} onChange={(event) => updateOption(groupIndex, optionIndex, { name: event.target.value })} placeholder={copy.optionNamePlaceholder} className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
-                              <input type="number" min={0} value={option.price_delta || ""} onChange={(event) => updateOption(groupIndex, optionIndex, { price_delta: Number(event.target.value) || 0 })} placeholder={copy.optionPrice} className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-800" />
-                              <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: currentGroup.options.filter((_, currentOptionIndex) => currentOptionIndex !== optionIndex) } : currentGroup))} className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
-                                {copy.removeOption}
+                  <div className="mt-4 space-y-2">
+                    {/* No option sets is the normal case for most dishes, so say so
+                        instead of leaving the tab looking unfinished. */}
+                    {(itemForm.option_groups ?? []).length === 0 ? (
+                      <div className="rounded-md border border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-800">
+                        <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.optionsEmptyTitle}</p>
+                      </div>
+                    ) : null}
+                    {(itemForm.option_groups ?? []).map((group, groupIndex) => {
+                      // A set is a scannable summary line until it is opened. The
+                      // rules are shown as one derived sentence rather than as the
+                      // three numbers behind them, so the owner reads back what they
+                      // built instead of re-reading the controls they set.
+                      const open = openOptionGroup === groupIndex;
+                      const maxSelect = group.max_select || 1;
+                      const minSelect = group.min_select || 1;
+                      const pickMany = maxSelect > 1;
+                      const named = group.options.filter((option) => option.name.trim());
+                      const setMax = (next: number) => {
+                        const capped = Math.max(1, Math.min(next, 50));
+                        updateOptionGroup(groupIndex, {
+                          max_select: capped,
+                          // A minimum can never outrun the maximum above it.
+                          min_select: group.required ? Math.min(Math.max(minSelect, 1), capped) : 0,
+                        });
+                      };
+                      const setMin = (next: number) => {
+                        updateOptionGroup(groupIndex, { min_select: Math.max(1, Math.min(next, maxSelect)) });
+                      };
+                      // 1-20 covers every real menu; an existing larger value stays
+                      // selectable so opening an old group cannot silently shrink it.
+                      const countChoices = Array.from(
+                        { length: Math.max(20, maxSelect) },
+                        (_, index) => index + 1,
+                      );
+                      const microLabel = "text-[11px] font-medium text-gray-500 dark:text-gray-400";
+                      const inputClass =
+                        "h-10 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800";
+                      // Every row in the panel spans the panel and ends on the same
+                      // right edge. Capping fields individually is what made the card
+                      // look ragged - the fix is a shared grid, not smaller boxes.
+                      const optionGrid = "grid grid-cols-[minmax(0,1fr)_4.75rem_2.25rem_2.25rem] gap-2";
+                      return (
+                        <div key={groupIndex} className="rounded-md border border-gray-200 dark:border-gray-800">
+                          <div className="flex items-start gap-2 px-3 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              {/* Edited in place. A separate "set name" field inside
+                                  the panel showed the same word twice and made you
+                                  open the set just to rename it. */}
+                              <input
+                                value={group.name}
+                                onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })}
+                                placeholder={copy.optionGroupPlaceholder}
+                                aria-label={copy.groupNameLabel}
+                                className="h-8 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 text-[13px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:bg-white placeholder:font-normal placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
+                              />
+                              <button
+                                type="button"
+                                aria-expanded={open}
+                                onClick={() => setOpenOptionGroup(open ? null : groupIndex)}
+                                className="ui-press block w-full text-left"
+                              >
+                              {open ? null : (
+                                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-600 dark:text-gray-300">
+                                  {named.length === 0 ? (
+                                    <span className="text-gray-400 dark:text-gray-500">{copy.noChoicesYet}</span>
+                                  ) : (
+                                    <>
+                                      {named.slice(0, 4).map((option, previewIndex) => {
+                                        // The same arrows the inventory history uses for
+                                        // stock in and out, so a choice that moves stock is
+                                        // visible without opening the set.
+                                        const movesStock = (option.ingredients ?? []).some((row) => row.ingredient_id && Number(row.quantity) > 0);
+                                        return (
+                                          <span key={previewIndex} className="inline-flex max-w-[9rem] items-center gap-1 truncate">
+                                            {movesStock ? <ChevronUp className="h-3 w-3 shrink-0 text-gray-400 dark:text-gray-500" aria-hidden /> : null}
+                                            <span className="truncate">{option.name.trim()}</span>
+                                            {option.price_delta ? <span className="tabular-nums text-gray-500 dark:text-gray-400">+{option.price_delta}</span> : null}
+                                          </span>
+                                        );
+                                      })}
+                                      {named.length > 4 ? <span className="text-gray-400 dark:text-gray-500">+{named.length - 4}</span> : null}
+                                    </>
+                                  )}
+                                </span>
+                              )}
                               </button>
                             </div>
-                          ))}
-                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: [...currentGroup.options, { name: "", price_delta: 0, is_default: false, display_order: currentGroup.options.length, is_active: true }] } : currentGroup))} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
-                            {copy.addOption}
-                          </button>
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-label={copy.groupNameLabel}
+                              onClick={() => setOpenOptionGroup(open ? null : groupIndex)}
+                              className="ui-press mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+                            >
+                              <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+                            </button>
+                          </div>
+
+                          {open ? (
+                            <div className="ai-reveal-down border-t border-gray-100 px-3 pb-3 pt-3 dark:border-gray-800">
+                              {/* A rule line per row. With the control pinned to the
+                                  right edge the label sat a long way from what it
+                                  names; the divider carries the eye across. */}
+                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                <label className="flex h-10 cursor-pointer items-center justify-between gap-3 text-[13px] text-gray-700 dark:text-gray-200">
+                                  <span>{copy.answerRequired}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(group.required)}
+                                    onChange={(event) => event.target.checked
+                                      ? updateOptionGroup(groupIndex, { required: true, min_select: Math.min(Math.max(minSelect, 1), maxSelect) })
+                                      : updateOptionGroup(groupIndex, { required: false, min_select: 0 })}
+                                    className="h-4 w-4 shrink-0 cursor-pointer accent-orange-600"
+                                  />
+                                </label>
+                                <label className="flex h-10 items-center justify-between gap-3 text-[13px] text-gray-700 dark:text-gray-200">
+                                  <span>{copy.countLabel}</span>
+                                  <div className="w-[4.5rem] shrink-0">
+                                    <ThemedSelect
+                                      aria-label={copy.countLabel}
+                                      compact
+                                      value={String(maxSelect)}
+                                      onChange={(next) => setMax(Number(next) || 1)}
+                                      options={countChoices.map((count) => ({ value: String(count), label: String(count) }))}
+                                    />
+                                  </div>
+                                </label>
+                                {group.required && pickMany ? (
+                                  <label className="flex h-10 items-center justify-between gap-3 text-[13px] text-gray-700 dark:text-gray-200">
+                                    <span>{copy.minLabel}</span>
+                                    <div className="w-[4.5rem] shrink-0">
+                                      <ThemedSelect
+                                        aria-label={copy.minLabel}
+                                        compact
+                                        value={String(minSelect)}
+                                        onChange={(next) => setMin(Number(next) || 1)}
+                                        options={Array.from({ length: maxSelect }, (_, index) => ({ value: String(index + 1), label: String(index + 1) }))}
+                                      />
+                                    </div>
+                                  </label>
+                                ) : null}
+                              </div>
+
+                              {/* Column heads stay put instead of living in placeholders
+                                  that vanish the moment you type - and they are what
+                                  makes the bare stock square below self-explanatory. */}
+                              <div className={`mt-4 ${optionGrid}`}>
+                                <span className={microLabel}>{copy.optionNameHead}</span>
+                                <span className={microLabel}>{copy.optionPriceHead}</span>
+                                <span className={`${microLabel} text-center`}>{copy.stockHead}</span>
+                                <span />
+                              </div>
+                              <div className="mt-1.5 space-y-2">
+                                {group.options.map((option, optionIndex) => {
+                                  const rows = option.ingredients ?? [];
+                                  return (
+                                    <div key={optionIndex}>
+                                      <div className={`${optionGrid} items-center`}>
+                                        <input
+                                          value={option.name}
+                                          onChange={(event) => updateOption(groupIndex, optionIndex, { name: event.target.value })}
+                                          placeholder={copy.optionNamePlaceholder}
+                                          className={inputClass}
+                                        />
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          value={option.price_delta || ""}
+                                          onChange={(event) => updateOption(groupIndex, optionIndex, { price_delta: Number(event.target.value) || 0 })}
+                                          placeholder="0"
+                                          className={`${inputClass} w-full px-2 tabular-nums`}
+                                        />
+                                        <button
+                                          type="button"
+                                          aria-label={copy.addOptionIngredient}
+                                          disabled={!recipeIngredients.length}
+                                          onClick={() => updateOptionIngredients(groupIndex, optionIndex, (current) => [...current, emptyOptionIngredient()])}
+                                          className={`ui-press grid h-10 w-9 place-items-center rounded-md text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                            rows.length
+                                              ? "border border-gray-300 bg-gray-50 text-gray-900 hover:border-orange-300 hover:text-orange-700 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:hover:border-orange-700 dark:hover:text-orange-200"
+                                              : "border border-dashed border-gray-300 text-gray-400 hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:text-gray-500 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                                          }`}
+                                        >
+                                          {rows.length || "+"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          aria-label={copy.removeOption}
+                                          onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: currentGroup.options.filter((_, currentOptionIndex) => currentOptionIndex !== optionIndex) } : currentGroup))}
+                                          className="ui-press grid h-10 w-9 place-items-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-gray-500 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                                        >
+                                          <X className="h-4 w-4" aria-hidden />
+                                        </button>
+                                      </div>
+                                      {rows.length ? (
+                                        <div className="ai-reveal-down mt-2 space-y-2 border-t border-gray-100 pl-3 pt-2 dark:border-gray-800">
+                                          {rows.map((row, rowIndex) => {
+                                            const ingredient = recipeIngredients.find((entry) => entry.ID === row.ingredient_id);
+                                            const chosenUnit = row.unit || ingredient?.unit || "";
+                                            const perUnit = stockUnitsPer(ingredient, chosenUnit);
+                                            const patchRow = (patch: Partial<MenuOptionIngredientInput>) =>
+                                              updateOptionIngredients(groupIndex, optionIndex, (current) => current.map((entry, index) => index === rowIndex ? { ...entry, ...patch } : entry));
+                                            return (
+                                              <div key={rowIndex} className="space-y-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <div className="min-w-0 flex-1">
+                                                    <ThemedSelect
+                                                      aria-label={copy.ingredient}
+                                                      compact
+                                                      value={String(row.ingredient_id || 0)}
+                                                      onChange={(next) => {
+                                                        const picked = recipeIngredients.find((entry) => entry.ID === Number(next));
+                                                        patchRow({ ingredient_id: Number(next), unit: picked?.unit ?? "" });
+                                                      }}
+                                                      options={[{ value: "0", label: copy.ingredient }, ...recipeIngredients.map((entry) => ({ value: String(entry.ID), label: `${entry.name} (${entry.unit})` }))]}
+                                                    />
+                                                  </div>
+                                                  <input
+                                                    type="number"
+                                                    min={0}
+                                                    step="0.01"
+                                                    value={row.quantity || ""}
+                                                    onChange={(event) => patchRow({ quantity: Number(event.target.value) || 0 })}
+                                                    placeholder={copy.quantity}
+                                                    className="h-9 w-16 shrink-0 rounded-md border border-gray-200 bg-white px-2 text-[12px] tabular-nums outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:w-20 sm:px-3"
+                                                  />
+                                                  <div className="w-[4.75rem] shrink-0 sm:w-24">
+                                                    <ThemedSelect
+                                                      aria-label={copy.unit}
+                                                      compact
+                                                      value={chosenUnit}
+                                                      onChange={(next) => patchRow({ unit: next })}
+                                                      options={(ingredient?.unit_family ?? [{ unit: chosenUnit, stock_per_unit: 1 }]).map((entry) => ({ value: entry.unit, label: entry.unit }))}
+                                                      placeholder={copy.unit}
+                                                    />
+                                                  </div>
+                                                  <button
+                                                    type="button"
+                                                    aria-label={copy.removeComponent}
+                                                    onClick={() => updateOptionIngredients(groupIndex, optionIndex, (current) => current.filter((_, index) => index !== rowIndex))}
+                                                    className="ui-press grid h-9 w-9 shrink-0 place-items-center rounded-md text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-gray-500 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                                                  >
+                                                    <X className="h-4 w-4" aria-hidden />
+                                                  </button>
+                                                </div>
+                                                {ingredient && chosenUnit && chosenUnit !== ingredient.unit && row.quantity ? (
+                                                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                                    = <span className="font-mono tabular-nums">{(row.quantity * perUnit).toLocaleString(undefined, { maximumFractionDigits: 6 })}</span> {ingredient.unit}
+                                                  </p>
+                                                ) : null}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="mt-3 flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: [...currentGroup.options, { name: "", price_delta: 0, is_default: false, display_order: currentGroup.options.length, is_active: true }] } : currentGroup))}
+                                  className="ui-press h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 transition-colors hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                                >
+                                  + {copy.addOption}
+                                </button>
+                                {/* Destructive action lives here, out of the scanning
+                                    path, so a mis-tap while browsing cannot delete a set. */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenOptionGroup(null);
+                                    updateOptionGroups((groups) => groups.filter((_, index) => index !== groupIndex));
+                                  }}
+                                  className="ui-press h-9 rounded-md px-2 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
+                                >
+                                  {copy.removeOptionGroup}
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {itemErrors.options && <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.options}</p>}
                   </div>
                 </div>
               )}
               {itemEditorTab === "recipe" && (
-                <div className="rounded-md border border-gray-200 dark:border-gray-800">
-                  <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <div>
-                      <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.recipeTitle}</p>
-                      <p className="mt-0.5 text-[11px] text-gray-500">{copy.recipeHint}</p>
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.recipeTitle}</p>
                     </div>
                     <button
                       type="button"
                       disabled={!recipeIngredients.length}
                       onClick={() => updateRecipeComponents((components) => [...components, emptyRecipeComponent()])}
-                      className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
+                      className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 transition-colors hover:border-orange-300 hover:text-orange-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
                     >
                       {copy.addRecipeComponent}
                     </button>
                   </div>
-                  <div className="space-y-3 p-3">
+                  <div className="mt-4 space-y-3">
                     {!recipeIngredients.length && (
-                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{copy.noIngredients}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.noIngredients}</p>
                     )}
                     {(itemForm.ingredients ?? []).map((component, componentIndex) => {
                       const selectedIngredient = recipeIngredients.find((ingredient) => ingredient.ID === component.ingredient_id);
                       return (
-                        <div key={componentIndex} className="grid gap-2 rounded-md border border-gray-200 p-2 dark:border-gray-800">
+                        <div key={componentIndex} className="grid gap-2 rounded-md border border-gray-200 p-3 dark:border-gray-800">
                           <ThemedSelect
+                            aria-label={copy.ingredient}
                             value={String(component.ingredient_id || 0)}
                             onChange={(next) => {
                               const ingredient = recipeIngredients.find((item) => item.ID === Number(next));
@@ -1297,7 +1566,7 @@ export default function MenuPage() {
                             }}
                             options={[{ value: "0", label: copy.ingredient }, ...recipeIngredients.map((ingredient) => ({ value: String(ingredient.ID), label: `${ingredient.name} (${ingredient.unit})` }))]}
                           />
-                          <div className="grid grid-cols-[1fr_80px_auto] gap-2">
+                          <div className="flex items-center gap-2">
                             <input
                               type="number"
                               min={0}
@@ -1305,22 +1574,39 @@ export default function MenuPage() {
                               value={component.quantity || ""}
                               onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
                               placeholder={copy.quantity}
-                              className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800"
+                              className="h-9 w-24 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] tabular-nums outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800"
                             />
-                            <input
-                              value={component.unit || selectedIngredient?.unit || ""}
-                              onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, unit: event.target.value } : current))}
-                              placeholder={copy.unit}
-                              className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-800"
-                            />
+                            <div className="w-28 shrink-0">
+                              <ThemedSelect
+                                compact
+                                value={component.unit || selectedIngredient?.unit || ""}
+                                onChange={(next) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, unit: next } : current))}
+                                options={(selectedIngredient?.unit_family ?? [{ unit: component.unit || selectedIngredient?.unit || "", stock_per_unit: 1 }]).map((option) => ({ value: option.unit, label: option.unit }))}
+                                aria-label={copy.unit}
+                              />
+                            </div>
                             <button
                               type="button"
                               onClick={() => updateRecipeComponents((components) => components.filter((_, index) => index !== componentIndex))}
-                              className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
+                              className="ui-press ml-auto h-9 shrink-0 rounded-md px-2 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
                             >
                               {copy.removeComponent}
                             </button>
                           </div>
+                          {(() => {
+                            // Only worth saying when the two differ - otherwise it
+                            // just repeats the number above.
+                            const chosen = component.unit || selectedIngredient?.unit || "";
+                            if (!selectedIngredient || !chosen || chosen === selectedIngredient.unit) return null;
+                            const option = selectedIngredient.unit_family?.find((entry) => entry.unit === chosen);
+                            if (!option || !component.quantity) return null;
+                            const inStockUnit = component.quantity * option.stock_per_unit;
+                            return (
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                = <span className="font-mono tabular-nums">{inStockUnit.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span> {selectedIngredient.unit}
+                              </p>
+                            );
+                          })()}
                           <input
                             value={component.note || ""}
                             onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, note: event.target.value } : current))}
@@ -1340,24 +1626,28 @@ export default function MenuPage() {
                 </div>
               )}
             </div>
-            <div className="grid gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-[1fr_auto]">
-              <button disabled={submitting || uploadingImage || imageEditing || !categories.length} className="ui-press h-10 rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
-                {editingItem ? copy.saveItem : copy.createItem}
-              </button>
-              {editingItem ? (
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => setDeleteTarget({ type: "item", id: editingItem.ID, name: editingItem.name })}
-                  className="ui-press h-10 rounded-md border border-red-200 bg-white px-4 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20"
-                >
-                  {copy.delete}
+            {/* The submit error was the third child of a two-column grid, so it
+                landed in a column instead of across the footer. It is lifted out
+                and the two buttons keep the grid to themselves. */}
+            <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+              {itemErrors.submit && <p className="mb-2 text-[11px] font-medium leading-5 text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
+              <div className={`grid gap-2 ${editingItem ? "sm:grid-cols-[auto_minmax(0,1fr)]" : ""}`}>
+                {editingItem ? (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setDeleteTarget({ type: "item", id: editingItem.ID, name: editingItem.name })}
+                    className="ui-press h-10 rounded-md border border-red-200 bg-white px-4 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/60 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20"
+                  >
+                    {copy.delete}
+                  </button>
+                ) : null}
+                <button disabled={submitting || uploadingImage || imageEditing || !categories.length} className="ui-press h-10 rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800">
+                  {editingItem ? copy.saveItem : copy.createItem}
                 </button>
-              ) : null}
-              {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
+              </div>
             </div>
           </form>
-          </div>
         </>
       )}
 

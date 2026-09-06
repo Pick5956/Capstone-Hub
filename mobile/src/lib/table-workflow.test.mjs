@@ -93,5 +93,24 @@ test('iPad order taking gives the full workspace to the table grid without chang
   assert.equal(source.match(/onPress=\{\(\) => open\(table\)\}/g)?.length, 1);
   assert.match(source, /width:\s*tabletWorkspace \? undefined : '48%'/);
   assert.match(source, /minWidth:\s*tabletWorkspace \? 164 : 0/);
-  assert.match(source, /flexBasis:\s*tabletWorkspace \? 176 : 150/);
+  assert.match(source, /flexBasis:\s*tabletWorkspace \? 176 : 'auto'/);
+});
+
+test('table cards keep one size instead of stretching across a partial last row', async () => {
+  const source = await readFile(path.join(mobileRoot, 'app', '(primary)', 'tables.tsx'), 'utf8');
+
+  // Phones must not grow at all: two fixed 48% columns, so a lone card on the
+  // last row stays half width instead of spanning the screen.
+  assert.match(source, /flexGrow:\s*tabletWorkspace \? 1 : 0/);
+  // Tablets may fill the row but never past a single card's size.
+  assert.match(source, /maxWidth:\s*tabletWorkspace \? 260 : undefined/);
+});
+
+test('a table with an active order never reads as available', async () => {
+  const source = await readFile(path.join(mobileRoot, 'app', '(primary)', 'tables.tsx'), 'utf8');
+
+  // Occupied is amber whether or not food is ready. Emerald means free, so a
+  // busy table must never take the free tint no matter what its items say.
+  assert.match(source, /const tone = order \? 'warning'/);
+  assert.doesNotMatch(source, /const tone = ready \? 'success'/);
 });

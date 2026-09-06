@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, MapPin, Minus, Plus, Printer, Rec
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { MENU_CARD_GRID_CLASS, MENU_CARD_SHELL_CLASS } from "@/src/lib/menuGrid";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
@@ -119,6 +120,7 @@ export default function PosOrderDetailPage() {
       back: "กลับไปเลือกโต๊ะ",
       search: "ค้นหาเมนู",
       all: "ทั้งหมด",
+      category: "หมวดหมู่",
       tableLabel: "โต๊ะ",
       orderLabel: "ออเดอร์",
       itemsLabel: "รายการ",
@@ -191,6 +193,7 @@ export default function PosOrderDetailPage() {
       back: "Back to tables",
       search: "Search menu",
       all: "All",
+      category: "Category",
       tableLabel: "Table",
       orderLabel: "Order",
       itemsLabel: "Items",
@@ -863,14 +866,14 @@ export default function PosOrderDetailPage() {
     <div className={`min-h-dvh w-full bg-slate-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
       <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <div className="px-4 py-2 sm:px-6 lg:px-8">
-          <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(12rem,0.7fr)_minmax(8rem,13rem)_auto_minmax(0,1fr)] lg:items-center">
+          <div className="grid w-full gap-1.5 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(10rem,20rem)_minmax(8rem,10rem)_minmax(0,1fr)_auto] lg:items-center">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
-            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-800 lg:order-1">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-800 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
-              <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[13px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-800">
+              <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-5">
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[13px] font-semibold text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-800">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.tableLabel}</span>
@@ -890,12 +893,12 @@ export default function PosOrderDetailPage() {
                   </span>
                 </button>
                 {canCloseTable ? (
-                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800">
+                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-xl border border-red-200 bg-red-50 px-3 text-[13px] font-semibold text-red-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] transition-[border-color,background-color,opacity] hover:border-red-300 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/50">
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
                 {pendingItemCount === 0 && !isTerminal && activeOrderItems.length > 0 ? (
-                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white transition-[background-color,opacity] hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800">
+                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-orange-700 px-3 text-[13px] font-semibold text-white shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] transition-[background-color,opacity] hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800">
                     <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
                   </button>
@@ -907,21 +910,23 @@ export default function PosOrderDetailPage() {
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(7.5rem,10rem)] gap-1.5 lg:contents">
               <div className="relative min-w-0 lg:order-2">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white pl-7 pr-3 text-[15px] outline-none focus:border-orange-500 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] placeholder:text-[15px] dark:bg-gray-800" />
               </div>
               <ThemedSelect
+                aria-label={copy.category}
                 className="lg:order-3"
+                triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]"
                 value={categoryId === "all" ? "all" : String(categoryId)}
                 onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
                 options={categoryOptions}
               />
             </div>
           )}
-          <div aria-hidden="true" className="hidden lg:order-5 lg:block" />
+          <div aria-hidden="true" className="hidden lg:order-4 lg:block" />
           </div>
         </div>
         {error ? (
-          <div className="mx-auto w-full max-w-6xl px-4 py-2 sm:px-6 lg:px-8">
+          <div className="w-full px-4 py-2 sm:px-6 lg:px-8">
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>
           </div>
         ) : null}
@@ -940,9 +945,9 @@ export default function PosOrderDetailPage() {
         </div>
       ) : order ? (
         // ── Menu grid (normal order-taking mode) ─────────────────────────────
-        <div className="mx-auto w-full max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
+        <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
           <section className="min-w-0">
-            <div className="grid auto-rows-max grid-cols-3 content-start items-start gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={MENU_CARD_GRID_CLASS}>
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
                 // remaining_servings === 0 means the queue already claimed the last
@@ -951,7 +956,7 @@ export default function PosOrderDetailPage() {
                 const lowStock = !soldOut && typeof item.remaining_servings === "number" && item.remaining_servings > 0 && item.remaining_servings <= 10;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 sm:min-h-[214px] sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className={`ui-press ${MENU_CARD_SHELL_CLASS} disabled:cursor-not-allowed disabled:opacity-50 sm:hover:-translate-y-0.5`}>
                     {soldOut ? (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
@@ -1084,7 +1089,7 @@ export default function PosOrderDetailPage() {
               </div>
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" />
               </label>
             </div>
             <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-800">
@@ -1105,7 +1110,7 @@ export default function PosOrderDetailPage() {
                   onClick={closeOrderSummary}
                   aria-label={orderSummaryCopy.close}
                   title={orderSummaryCopy.close}
-                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 dark:text-white"
+                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none dark:text-white"
                 >
                   <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                 </button>
@@ -1138,7 +1143,7 @@ export default function PosOrderDetailPage() {
                   onClick={closeCurrentRound}
                   aria-label={currentRoundCopy.close}
                   title={currentRoundCopy.close}
-                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 dark:text-white"
+                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none dark:text-white"
                 >
                   <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                 </button>
@@ -1274,7 +1279,7 @@ export default function PosOrderDetailPage() {
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder={copy.search}
-                        className="mb-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-800"
+                        className="mb-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-800 dark:bg-gray-800"
                       />
                       <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
                         {categoryOptions.map((option) => {
@@ -1421,7 +1426,7 @@ export default function PosOrderDetailPage() {
               maxLength={500}
               placeholder={copy.cancelItemPlaceholder}
               autoFocus
-              className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); setBillCancelMode("line"); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.keepItemBtn}</button>

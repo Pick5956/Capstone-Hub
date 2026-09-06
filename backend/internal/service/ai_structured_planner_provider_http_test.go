@@ -607,3 +607,69 @@ func TestGroqStructuredPlannerUsesJSONObjectModeForDefaultModel(t *testing.T) {
 		t.Fatal("the schema must be carried in the system prompt when the provider will not enforce it")
 	}
 }
+
+// A revoked or mistyped first key must not end the rotation. This is the case
+// that was missing: 429 and a deterministic 400 were both covered, 401 and 403
+// were not, and the predicate deciding it was looking for an error type nothing
+// constructs - so every key after the first was silently never tried.
+func TestGroqStructuredPlannerProviderRotatesKeyAfter401(t *testing.T) {
+	t.Setenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-120b")
+
+	var mu sync.Mutex
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		call := len(authorizations)
+		mu.Unlock()
+		if call == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid api key"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"answer\":\"second-key\"}"}}]}`))
+	}))
+	defer server.Close()
+
+	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"revoked-key", "good-key"}, server.URL)
+	response, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest())
+	if err != nil {
+		t.Fatalf("a revoked first key must fall through to the next one: %v", err)
+	}
+	if response.RawJSON != `{"answer":"second-key"}` {
+		t.Fatalf("response = %+v", response)
+	}
+	if response.HTTPAttempts != 2 || response.KeyFallbacks != 1 || response.RateLimits != 0 {
+		t.Fatalf("rotation stats = %+v, want 2 attempts / 1 fallback / 0 rate limits", response)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"Bearer revoked-key", "Bearer good-key"}
+	if len(authorizations) != len(want) || authorizations[0] != want[0] || authorizations[1] != want[1] {
+		t.Fatalf("authorizations = %#v, want %#v", authorizations, want)
+	}
+}
+
+// The bug was a seam, not a function: classifyProviderResponse produces one
+// error type and structuredPlannerShouldTryNextKey was matching another, so both
+// halves looked correct read on their own. Assert they actually agree.
+func TestKeyRotationPredicateAcceptsWhatTheClassifierProduces(t *testing.T) {
+	for _, testCase := range []struct {
+		status int
+		want   bool
+	}{
+		{http.StatusUnauthorized, true},
+		{http.StatusForbidden, true},
+		{http.StatusBadRequest, false},
+		{http.StatusInternalServerError, false},
+	} {
+		err := classifyProviderResponse("groq", "planner", "model", &http.Response{
+			StatusCode: testCase.status,
+			Header:     http.Header{},
+		})
+		if got := structuredPlannerShouldTryNextKey(err); got != testCase.want {
+			t.Fatalf("status %d: rotate = %v, want %v (error type %T)", testCase.status, got, testCase.want, err)
+		}
+	}
+}

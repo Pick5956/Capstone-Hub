@@ -35,7 +35,7 @@ function inlineContent(text: string) {
         <a
           key={index}
           href={docsCitation[2]}
-          className="font-semibold text-orange-700 underline decoration-orange-300 underline-offset-2 hover:text-orange-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 dark:text-orange-300 dark:decoration-orange-700 dark:hover:text-orange-200"
+          className="font-semibold text-orange-700 underline decoration-orange-300 underline-offset-2 hover:text-orange-800 focus-visible:outline-none dark:text-orange-300 dark:decoration-orange-700 dark:hover:text-orange-200"
         >
           {docsCitation[1]}
         </a>

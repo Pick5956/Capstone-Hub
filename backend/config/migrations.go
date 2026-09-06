@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 21
+	CurrentSchemaVersion int64 = 22
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -369,6 +369,25 @@ func schemaMigrationPlan() []SchemaMigration {
 		},
 		{
 			Version: 20,
+			Name:    "menu_option_ingredients",
+			Up: func(ctx *MigrationContext) error {
+				// Lets one option carry its own ingredient use, so "เพิ่มกุ้ง 2 ตัว"
+				// deducts two more shrimp instead of only charging for them.
+				// Additive: a new table nothing reads yet, so rolling back leaves
+				// an unused table and every existing recipe deduction untouched.
+				if err := ctx.DB.AutoMigrate(&entity.MenuOptionIngredient{}); err != nil {
+					return fmt.Errorf("migrate menu option ingredients: %w", err)
+				}
+				return nil
+			},
+		},
+		// 21 and 22 were numbered 20 and 21 on the assistant branch while main
+		// took 20 for menu_option_ingredients. Main's number stands — the public
+		// deploy had already run it — so these moved up. Both are IF NOT EXISTS,
+		// so a database that ran them under the old numbers takes them again
+		// without complaint.
+		{
+			Version: 21,
 			Name:    "ai_conversation_turn_latency",
 			Up: func(ctx *MigrationContext) error {
 				// Additive: one integer column, defaulting to 0 for every turn
@@ -382,7 +401,7 @@ func schemaMigrationPlan() []SchemaMigration {
 			},
 		},
 		{
-			Version: 21,
+			Version: 22,
 			Name:    "restaurant_ai_preferences",
 			Up: func(ctx *MigrationContext) error {
 				// The AI settings screen grew sections: which of the seven actions

@@ -162,8 +162,14 @@ export default function ReservationHistoryModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="mb-4 flex flex-wrap gap-2">
+        {/* Fixed height, not content height. The panel is centred, so anything
+            that changes its height moves it: the skeleton is ~190px taller than
+            the empty state, so the box lurched upward the moment the fetch
+            resolved - right as the entrance animation was settling. Switching a
+            filter chip did it again. A constant body means the panel is placed
+            once and never moves, and the list scrolls inside it. */}
+        <div className="flex h-[min(32rem,calc(100dvh-12rem))] flex-col overflow-hidden p-4">
+          <div className="mb-4 flex shrink-0 flex-wrap gap-2">
             {filters.map((item) => (
               <button
                 key={item.value}
@@ -181,10 +187,10 @@ export default function ReservationHistoryModal({
             ))}
           </div>
 
-          {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+          {error && <div className="mb-4 shrink-0 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-          <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <div className="hidden grid-cols-[minmax(70px,0.6fr)_minmax(120px,1fr)_minmax(110px,0.9fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(110px,0.8fr)] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 lg:grid">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="hidden shrink-0 grid-cols-[minmax(70px,0.6fr)_minmax(120px,1fr)_minmax(110px,0.9fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(110px,0.8fr)] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 lg:grid">
               <span>{copy.table}</span>
               <span>{copy.name}</span>
               <span>{copy.phone}</span>
@@ -193,6 +199,7 @@ export default function ReservationHistoryModal({
               <span className="text-center">{copy.status}</span>
             </div>
 
+            <div className="min-h-0 flex-1 overflow-y-auto">
             {loading ? (
               <div className="space-y-2 p-4">
                 {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-12" />)}
@@ -215,8 +222,9 @@ export default function ReservationHistoryModal({
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-14 text-center text-[14px] text-gray-500 dark:text-gray-400">{copy.empty}</div>
+              <div className="grid h-full place-items-center px-4 text-center text-[14px] text-gray-500 dark:text-gray-400">{copy.empty}</div>
             )}
+            </div>
           </div>
         </div>
       </div>

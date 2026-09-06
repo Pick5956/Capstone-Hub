@@ -554,7 +554,7 @@ export default function MenuImageCropper({
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
-          className={`relative aspect-[4/3] w-full touch-none overflow-hidden rounded-md border border-gray-300 bg-slate-50 outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 dark:border-gray-700 dark:bg-gray-950 ${
+          className={`relative aspect-[4/3] w-full touch-none overflow-hidden rounded-md border border-gray-300 bg-slate-50 outline-none dark:border-gray-700 dark:bg-gray-950 ${
             dragging ? "cursor-grabbing" : "cursor-grab"
           }`}
           style={cropCanvasStyle}
@@ -647,7 +647,7 @@ export default function MenuImageCropper({
                 setRemoveBackground((value) => !value);
                 onError("");
               }}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/35 disabled:opacity-45 ${
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none disabled:opacity-45 ${
                 removeBackground ? "bg-orange-600" : "bg-gray-300 dark:bg-gray-700"
               }`}
             >
@@ -754,7 +754,7 @@ export default function MenuImageCropper({
     <div className="flex items-start gap-3">
       <label
         title={copy.chooseImage}
-        className={`group relative block aspect-square w-24 shrink-0 overflow-hidden rounded-md bg-transparent focus-within:ring-2 focus-within:ring-orange-500/40 ${
+        className={`group relative block aspect-square w-24 shrink-0 overflow-hidden rounded-md bg-transparent ${
           disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
         }`}
       >

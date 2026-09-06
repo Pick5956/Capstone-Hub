@@ -78,10 +78,6 @@ func (r *UserRepository) Create(user *entity.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *UserRepository) Update(user *entity.User) error {
-	return r.db.Save(user).Error
-}
-
 func (r *UserRepository) UpdateProfile(user *entity.User) error {
 	return r.db.Model(user).Updates(map[string]any{
 		"first_name": user.FirstName,

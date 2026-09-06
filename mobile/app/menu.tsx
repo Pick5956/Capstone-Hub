@@ -1,17 +1,17 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, useWindowDimensions, View } from 'react-native';
+import { Pressable, Switch, useWindowDimensions, View } from 'react-native';
 
 import { listCategories, listMenuItems, setMenuItemAvailability } from '@/src/api/menu';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { Button, ChipGroup, EmptyState, Feedback, SearchField, StatusBadge } from '@/src/components/ui';
+import { Button, EmptyState, Feedback, SearchField, Select } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
 
 export default function MenuScreen() {
@@ -21,7 +21,6 @@ export default function MenuScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [category, setCategory] = useState('all');
-  const [availability, setAvailability] = useState<'all' | 'available' | 'hidden'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -56,13 +55,10 @@ export default function MenuScreen() {
       const categoryMatch = category === 'all'
         || item.category_id === Number(category)
         || item.categories?.some((link) => link.category_id === Number(category));
-      const availabilityMatch = availability === 'all'
-        || (availability === 'available' ? item.is_available : !item.is_available);
       return categoryMatch
-        && availabilityMatch
         && (!keyword || [item.name, item.description].some((value) => String(value || '').toLowerCase().includes(keyword)));
     });
-  }, [availability, category, items, search]);
+  }, [category, items, search]);
 
   async function toggle(item: MenuItem) {
     if (!canManage) return;
@@ -125,23 +121,13 @@ export default function MenuScreen() {
             />
           ) : null}
         </View>
-        <ChipGroup
-          scrollable
+        <Select
+          label={copy('หมวดหมู่', 'Category')}
           value={category}
           onChange={setCategory}
           options={[
             { label: copy('ทุกหมวด', 'All categories'), value: 'all' },
             ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) })),
-          ]}
-        />
-        <ChipGroup
-          scrollable
-          value={availability}
-          onChange={setAvailability}
-          options={[
-            { label: copy('ทั้งหมด', 'All'), value: 'all' },
-            { label: copy('พร้อมขาย', 'Available'), value: 'available' },
-            { label: copy('ปิดขาย', 'Unavailable'), value: 'hidden' },
           ]}
         />
       </View>
@@ -152,8 +138,12 @@ export default function MenuScreen() {
             key={item.ID}
             style={{
               minWidth: 0,
-              flexGrow: tabletWorkspace ? 0 : 1,
-              flexBasis: tabletWorkspace ? 240 : 155,
+              // Phones get an exact two-column grid. A grow factor here fights the
+              // column width and stretches a lone card on the last row across the
+              // screen, which reads as a different, more important item.
+              width: tabletWorkspace ? undefined : '48%',
+              flexGrow: 0,
+              flexBasis: tabletWorkspace ? 240 : 'auto',
               maxWidth: tabletWorkspace ? 260 : undefined,
               gap: spacing.sm,
             }}
@@ -174,23 +164,35 @@ export default function MenuScreen() {
               <View style={{ gap: spacing.xs, paddingHorizontal: spacing.xs }}>
                 <Text selectable numberOfLines={2} style={typeScale.cardTitle}>{item.name}</Text>
                 <Text selectable style={typeScale.number}>{money(item.price, language)}</Text>
-                <StatusBadge
-                  label={item.is_available ? copy('พร้อมขาย', 'Available') : copy('ปิดขาย', 'Unavailable')}
-                  tone={item.is_available ? 'success' : 'neutral'}
-                />
               </View>
             </Pressable>
-            {canManage ? (
-              <Button
-                compact
-                icon={item.is_available ? 'eye-off-outline' : 'eye-outline'}
-                variant="secondary"
-                label={item.is_available ? copy('ปิดขาย', 'Hide') : copy('เปิดขาย', 'Show')}
-                onPress={() => void toggle(item)}
-                loading={savingId === item.ID}
-                disabled={savingId !== null && savingId !== item.ID}
+            {/*
+              The switch position is the status - a badge beside it would say the
+              same thing twice. It stays rendered but disabled without manage
+              rights, so a read-only account can still read availability.
+            */}
+            <View
+              style={{
+                minHeight: 44,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+                paddingHorizontal: spacing.xs,
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                style={[typeScale.caption, { minWidth: 0, flex: 1, color: palette.muted, fontWeight: '700' }]}
+              >
+                {copy('พร้อมขาย', 'Available')}
+              </Text>
+              <Switch
+                accessibilityLabel={copy(`พร้อมขาย ${item.name}`, `${item.name} available`)}
+                disabled={!canManage || (savingId !== null && savingId !== item.ID)}
+                onValueChange={() => void toggle(item)}
+                value={item.is_available}
               />
-            ) : null}
+            </View>
           </View>
         ))}
       </View>

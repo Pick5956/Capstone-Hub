@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Switch, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { createTableTag, deleteTableTag, listTableTags, updateTableTag } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
@@ -147,13 +147,6 @@ export default function TagManagerScreen() {
       </View>
       <TextField label={copy('ชื่อแท็ก', 'Tag name')} value={tagName} onChangeText={setTagName} icon="pricetag-outline" error={formError && !tagName.trim() ? formError : null} />
       <TextField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={tagOrder} onChangeText={setTagOrder} />
-      <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.sm }}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={typeScale.cardTitle}>{copy('เปิดใช้งาน', 'Active')}</Text>
-          <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('แสดงแท็กนี้ตอนจัดโต๊ะ', 'Show this tag when organizing tables')}</Text>
-        </View>
-        <Switch value={tagActive} onValueChange={setTagActive} />
-      </View>
       {tabletWorkspace ? <Button icon="checkmark" label={editingTag ? copy('บันทึกแท็ก', 'Save tag') : copy('เพิ่มแท็ก', 'Add tag')} onPress={saveTag} loading={submitting} /> : null}
     </Surface>
   );

@@ -61,10 +61,6 @@ export function getTargetStock(item: Ingredient) {
   return item.min_stock > 0 ? item.min_stock * 2 : Math.max(item.stock, 1);
 }
 
-export function getRestockAmount(item: Ingredient) {
-  return Math.max(0, getTargetStock(item) - item.stock);
-}
-
 export function getInventoryValue(item: Ingredient) {
   return item.stock * item.cost_per_unit;
 }
@@ -72,17 +68,22 @@ export function getInventoryValue(item: Ingredient) {
 export function buildAdjustStockPayload({
   type,
   quantity,
+  unit,
   note,
   paidAmount,
   canManageExpenses,
 }: {
   type: AdjustStockInput["type"];
   quantity: number;
+  unit?: string;
   note: string;
   paidAmount: string;
   canManageExpenses: boolean;
 }): AdjustStockInput {
   const payload: AdjustStockInput = { type, quantity, note };
+  // Only send a unit when it differs from what the ingredient stores; an empty
+  // unit already means "the ingredient's own", and sending it adds nothing.
+  if (unit && unit.trim()) payload.unit = unit.trim();
   const amount = Number(paidAmount);
   if (type === "in" && canManageExpenses && paidAmount.trim() !== "" && Number.isFinite(amount) && amount > 0) {
     payload.amount = amount;
@@ -100,36 +101,5 @@ export function formatDateTime(value: string | undefined, language: "th" | "en")
   });
 }
 
-export function SectionCard({
-  label,
-  value,
-  helper,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-  tone?: "default" | "warm" | "danger" | "success";
-}) {
-  const toneClass =
-    tone === "warm"
-      ? "border-orange-200/80 bg-orange-50/80 dark:border-orange-900/40 dark:bg-orange-950/20"
-      : tone === "danger"
-        ? "border-red-200/80 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/20"
-        : tone === "success"
-          ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-          : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
-
-  return (
-    <div className={`rounded-md border px-2.5 py-1.5 ${toneClass}`}>
-      <span className="text-[11px] leading-none text-gray-500">{label}</span>
-      <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight text-gray-900 tabular-nums dark:text-white">
-        {value}
-      </p>
-      {helper ? <p className="mt-0.5 text-[10px] leading-tight text-gray-500 dark:text-gray-400">{helper}</p> : null}
-    </div>
-  );
-}
-
 export const inputCls =
-  "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:ring-orange-900/30";
+  "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500";

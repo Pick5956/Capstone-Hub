@@ -43,6 +43,33 @@
   --color-gray-700: #454545;
 }
 
+/* Nav rail theme. Light mode paints the rail orange (#FFA951) with dark warm
+   text and a light "selected" pill; dark mode keeps the neutral rail. Every rail
+   colour reads from these tokens, so the two themes live in one place. */
+[data-nav-rail] {
+  --rail-bg: #FFA951;
+  --rail-fg: #431407;
+  --rail-fg-muted: #7c2d12;
+  --rail-fg-dim: rgba(67, 20, 7, 0.55);
+  --rail-hover-bg: rgba(255, 255, 255, 0.4);
+  --rail-hover-fg: #431407;
+  --rail-border: rgba(0, 0, 0, 0.12);
+  --rail-active-bg: #fff7ed;
+  --rail-active-fg: #c2410c;
+}
+
+.dark [data-nav-rail] {
+  --rail-bg: #0f0f0f;
+  --rail-fg: #e5e7eb;
+  --rail-fg-muted: #9ca3af;
+  --rail-fg-dim: #6b7280;
+  --rail-hover-bg: #212121;
+  --rail-hover-fg: #ffffff;
+  --rail-border: var(--dashboard-shell-border);
+  --rail-active-bg: #431407;
+  --rail-active-fg: #fed7aa;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -440,6 +467,22 @@ html {
   animation: modal-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-slide-up {
+  animation: toast-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .motion-overlay {
   animation: modal-fade-in 180ms ease-out;
 }
@@ -775,7 +818,9 @@ html {
   .themed-select-menu,
   .themed-select-menu-exit,
   .themed-select-option,
-  .animate-slide-down {
+  .animate-slide-down,
+  .animate-slide-up,
+  .ai-reveal-down {
     animation: none !important;
   }
 
@@ -934,6 +979,37 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 .ai-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgba(249, 115, 22, 0.55);
+}
+
+/* ---- Thai leading vowels inside form fields -------------------------------
+   Same glyph problem as the clipped-text rule below, different box. A field
+   clips its value at the CONTENT edge, not the padding edge, so padding does
+   not help: โ เ แ ไ ใ are drawn to the LEFT of the text origin and the first
+   character loses its upright stroke, which is most of what makes ไ readable.
+
+   text-indent moves only the text, so the field keeps its size and the caret
+   still lands where it looks like it should. 6px, not the ~1px that
+   measureText().actualBoundingBoxLeft reports: at 4x zoom the hook of the first
+   ไ is visibly still being sliced at 2px. 6px leaves room to spare rather
+   than sitting on the exact threshold. */
+input,
+textarea {
+  text-indent: 6px;
+}
+
+/* ---- Thai leading vowels inside clipped text ------------------------------
+   โ เ แ ไ ใ are pre-posed vowels: they are drawn to the LEFT of the text
+   origin. Any box that clips its own overflow starts exactly at that origin,
+   so the vowel's upright stroke is sliced off - visible on every truncated
+   zone name, menu name and select option that starts with one.
+
+   The 2px is given to the clip box and taken straight back from the layout, so
+   nothing moves; the glyph simply has room to exist inside the clip. Applies to
+   the two Tailwind utilities that clip text. */
+.truncate,
+[class*="line-clamp-"] {
+  padding-left: 2px;
+  margin-left: -2px;
 }
 /* ---- Dishy web shell ------------------------------------------------------
    The dashboard content sits on a white sheet beside the rail. It was framed
