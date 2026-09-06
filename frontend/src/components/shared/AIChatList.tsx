@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { MessageSquareText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageSquareText, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { deleteAIConversation, listAIConversations, renameAIConversation } from "@/src/lib/ai";
 import { matchesThreadQuery, notifyConversationsChanged, threadGroup, useConversationsVersion, type AIThreadGroup } from "@/src/lib/aiThreads";
 import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
@@ -41,6 +41,7 @@ function copy(language: "th" | "en") {
         removeDescription: "แชทจะย้ายไปถังขยะ กู้คืนได้ภายใน 7 วันจากตั้งค่าผู้ช่วย",
         removeYes: "ย้ายไปถังขยะ",
         cancel: "ยกเลิก",
+        more: "ตัวเลือก",
         collapse: "ซ่อนรายการแชท",
         expand: "แสดงรายการแชท",
         close: "ปิด",
@@ -64,6 +65,7 @@ function copy(language: "th" | "en") {
         removeDescription: "It moves to the trash and can be restored within 7 days from the assistant settings",
         removeYes: "Move to trash",
         cancel: "Cancel",
+        more: "Options",
         collapse: "Hide chat list",
         expand: "Show chat list",
         close: "Close",
@@ -114,6 +116,27 @@ export default function AIChatList({
   const [renameDraft, setRenameDraft] = useState("");
   const [removing, setRemoving] = useState<AIConversationSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  // The "⋯" menu open on one row, if any. Closes on a click anywhere else or
+  // on Escape, the way a menu is expected to.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuFor) return;
+    const onDown = (event: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuFor(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuFor(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuFor]);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -186,10 +209,10 @@ export default function AIChatList({
   };
 
   const rowButton =
-    "group flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition-colors";
+    "group flex w-full items-start gap-2 rounded-xl py-2 pl-2.5 pr-9 text-left transition-colors";
 
   const list = (
-    <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+    <div className="ai-scroll min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 pb-3">
       {conversations === null ? (
         <p className="px-2 py-6 text-center text-[12px] text-gray-400">…</p>
       ) : visibleCount === 0 ? (
@@ -225,35 +248,62 @@ export default function AIChatList({
                         </span>
                       </span>
                     </button>
-                    {/* Row actions: hidden until the pointer is on the row, always
-                        shown where there is no pointer to hover with. */}
-                    <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+                    {/* "⋯" on every row, always visible, opening a small menu.
+                        Icons that appeared only on hover were never found on a
+                        phone, and not found on a desktop either. */}
+                    <div ref={menuFor === conversation.id ? menuRef : undefined} className="absolute right-1 top-1.5">
                       <button
                         type="button"
-                        aria-label={t.rename}
-                        title={t.rename}
+                        aria-label={t.more}
+                        aria-haspopup="menu"
+                        aria-expanded={menuFor === conversation.id}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setRenameDraft(conversation.title || "");
-                          setRenaming(conversation);
+                          setMenuFor((current) => (current === conversation.id ? null : conversation.id));
                         }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white hover:text-orange-700 dark:hover:bg-gray-800"
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                          menuFor === conversation.id
+                            ? "bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-100"
+                            : active
+                              ? "text-orange-600/70 hover:bg-white hover:text-orange-800 dark:text-orange-300/70 dark:hover:bg-gray-800"
+                              : "text-gray-400 hover:bg-white hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800"
+                        }`}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <MoreHorizontal className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        aria-label={t.remove}
-                        title={t.remove}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setRemoving(conversation);
-                        }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white hover:text-red-600 dark:hover:bg-gray-800"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </span>
+                      {menuFor === conversation.id && (
+                        <div
+                          role="menu"
+                          className="absolute right-0 top-8 z-20 w-40 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMenuFor(null);
+                              setRenameDraft(conversation.title || "");
+                              setRenaming(conversation);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-gray-400" /> {t.rename}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMenuFor(null);
+                              setRemoving(conversation);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> {t.remove}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
