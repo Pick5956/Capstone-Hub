@@ -14,6 +14,8 @@ import {
 import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import { useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
+import ForecastChart from "@/src/components/shared/ForecastChart";
+import AIChart from "@/src/components/shared/AIChart";
 import { ORB_DEFAULT_PALETTE, orbPaletteForSurface, parseCssRgb, type OrbPalette } from "@/src/lib/orbPalette";
 
 // The draggable orb: its size (h-14), how far a press may travel and still be
@@ -59,7 +61,7 @@ import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage } from "@/src/types/ai";
+import type { AIActionPlan, AIActionPreview, AIAskResponse, AIChartData, AIConversationMessage, AIForecastResult } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
@@ -71,6 +73,10 @@ type Message = {
   content: string;
   createdAt: Date;
   actions?: AIGuidedAction[];
+  // The pictures an answer came with, drawn under it the same way the AI
+  // page draws them. The floating chat used to drop both on the floor.
+  forecast?: AIForecastResult;
+  chart?: AIChartData;
   // ใบยืนยันเป็นของคำตอบใบใดใบหนึ่ง ไม่ใช่ของทั้งบทสนทนา · เก็บ id ไว้กับ
   // ข้อความที่สร้างมัน กล่องจะได้อยู่ใต้คำตอบนั้นแทนที่จะไหลไปท้ายสายเสมอ
   planId?: string;
@@ -607,6 +613,8 @@ export default function AIOperationsFloatingChat() {
             : data.intent === "analysis"
               ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
               : undefined,
+        forecast: data.forecast,
+        chart: data.chart,
         planId: data.action_plan?.id,
         previewId: data.action_preview?.id,
       };
@@ -988,6 +996,12 @@ export default function AIOperationsFloatingChat() {
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md border border-gray-200/70 bg-white px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
+                    {msg.forecast && msg.forecast.forecast.length > 0 && (
+                      <ForecastChart data={msg.forecast} language={language} />
+                    )}
+                    {msg.chart && msg.chart.categories.length > 0 && (
+                      <AIChart data={msg.chart} language={language} />
+                    )}
                   </div>
                 </div>
                 {followUpsOn && msg.actions && msg.actions.length > 0 && (
