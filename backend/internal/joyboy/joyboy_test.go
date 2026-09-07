@@ -278,7 +278,7 @@ func TestHistoryIsTrimmedBySizeNotByCount(t *testing.T) {
 	}
 	rendered = formatHistory(long)
 	verbatim := rendered
-	if at := strings.Index(rendered, "บทสนทนาก่อนหน้า:"); at >= 0 {
+	if at := strings.Index(rendered, "บทสนทนาก่อนหน้า"); at >= 0 {
 		verbatim = rendered[at:]
 	}
 	// The oldest long turns leave the verbatim window...

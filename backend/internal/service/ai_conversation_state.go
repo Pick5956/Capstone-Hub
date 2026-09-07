@@ -163,9 +163,9 @@ func conversationTurnsToMessages(turns []entity.AIConversationTurn) []AIConversa
 		messages = append(messages,
 			AIConversationMessage{
 				ID: turnID + "-user", Role: "user", Content: turn.Question,
-				Topic: conversationTurnTopic(turn),
+				Topic: conversationTurnTopic(turn), At: turn.CreatedAt,
 			},
-			AIConversationMessage{ID: turnID + "-assistant", Role: "assistant", Content: providerSafeConversationAnswer(turn)},
+			AIConversationMessage{ID: turnID + "-assistant", Role: "assistant", Content: providerSafeConversationAnswer(turn), At: turn.CreatedAt},
 		)
 	}
 	return sanitizeConversationHistoryInternal(messages, true)

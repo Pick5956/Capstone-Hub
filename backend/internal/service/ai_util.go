@@ -53,7 +53,7 @@ func sanitizeConversationHistoryInternal(history []AIConversationMessage, trustR
 		// into a readable index line ("— เรื่องวัตถุดิบและสต๊อก"). Dropped here, the
 		// index still rendered — just with every label missing, in production only:
 		// the joyboy tests build their turns directly and never crossed this line.
-		cleaned = append(cleaned, AIConversationMessage{ID: id, Role: role, Content: content, Topic: message.Topic})
+		cleaned = append(cleaned, AIConversationMessage{ID: id, Role: role, Content: content, Topic: message.Topic, At: message.At})
 	}
 	return cleaned
 }

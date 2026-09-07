@@ -1,6 +1,9 @@
 package joyboy
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // The interfaces here are the entire surface between Joyboy and the rest of the
 // backend. They are written from Joyboy's side — what it needs, not what the
@@ -86,6 +89,13 @@ type Tools interface {
 type Turn struct {
 	Role    string
 	Content string
+
+	// At is when the turn was said. It is printed in front of the line so the
+	// model can tell that an old answer's "สัปดาห์ก่อน = 24–30 ส.ค." was worked
+	// out on another day: without it, a relative date in the history read as a
+	// fact about today and was copied into a wrong answer. Zero leaves the
+	// stamp out.
+	At time.Time
 
 	// Topic is a short Thai label for what this turn was about, written by the
 	// caller from what the turn actually used (its tool's section: "วัตถุดิบและ

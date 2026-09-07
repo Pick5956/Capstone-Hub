@@ -1,6 +1,7 @@
 package joyboy
 
 import (
+	"time"
 	"fmt"
 	"regexp"
 	"strings"
@@ -213,6 +214,11 @@ const answerTemplate = joyboyPersona + `
 - อิโมจิใส่นำหัวข้อหรือประเด็นได้ แต่อย่าใส่ทุกบรรทัดหรือท้ายทุกประโยค
 
 วิธีอ่านข้อมูล:
+- **คำตอบเก่าในประวัติเขียนไว้ ณ วันเวลาในวงเล็บหน้าบรรทัดนั้น ไม่ใช่วันนี้**
+  วันที่ ช่วงเวลา และตัวเลขในคำตอบเก่าเป็นของวันนั้น ห้ามลอกมาตอบวันนี้
+  คำถามเรื่องวันที่ (วันนี้ สัปดาห์นี้ สัปดาห์ก่อน 7 วันก่อน) ให้ตอบจากบรรทัด "วันนี้คือ" เท่านั้น
+  ต่อให้ในประวัติเคยตอบไว้ต่างจากนั้นก็ตาม — อันนั้นถูกในวันที่มันถูกเขียน ไม่ใช่วันนี้
+  และห้ามลอกสำนวนของคำตอบเก่า เช่น "จากข้อมูลล่าสุด" ให้ตอบตรง ๆ ด้วยคำของคุณเอง
 - บรรทัด period= บอกช่วงเวลาที่ตัวเลขครอบคลุม ถ้าเอ่ยตัวเลข ให้บอกช่วงเวลาเป็นคำพูดด้วย
 - status=no_data แปลว่าเครื่องมือนั้นไม่มีข้อมูล ให้อธิบายตามเหตุผลที่ reason= ระบุ
 - **ถ้าใบข้อมูลมีบรรทัด note= ที่บอกว่าเป็นอันดับต้นเท่านั้น ให้เชื่อตามนั้น**
@@ -301,6 +307,11 @@ const noDataAnswerTemplate = joyboyPersona + `
 - ตอบเป็นภาษาไทย กระชับ เป็นประโยคที่คนพูดกัน
 - ลงท้ายคำตอบด้วย "ครับ" ครั้งเดียวติดท้ายประโยคสุดท้าย
 - ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX เขียนสูตรเป็นข้อความธรรมดา
+- **คำตอบเก่าในประวัติเขียนไว้ ณ วันเวลาในวงเล็บหน้าบรรทัดนั้น ไม่ใช่วันนี้**
+  วันที่ ช่วงเวลา และตัวเลขในคำตอบเก่าเป็นของวันนั้น ห้ามลอกมาตอบวันนี้
+  คำถามเรื่องวันที่ (วันนี้ สัปดาห์นี้ สัปดาห์ก่อน 7 วันก่อน) ให้ตอบจากบรรทัด "วันนี้คือ" เท่านั้น
+  ต่อให้ในประวัติเคยตอบไว้ต่างจากนั้นก็ตาม — อันนั้นถูกในวันที่มันถูกเขียน ไม่ใช่วันนี้
+  และห้ามลอกสำนวนของคำตอบเก่า เช่น "จากข้อมูลล่าสุด" ให้ตอบตรง ๆ ด้วยคำของคุณเอง
 
 ข้อห้าม:
 - **ถ้าผู้ใช้สั่งให้ทำอะไร ห้ามบอกผลลัพธ์ว่าทำให้แล้ว ไม่ว่ากรณีใด**
@@ -477,7 +488,7 @@ func formatHistory(history []Turn) string {
 		if history[i].Role == "assistant" {
 			who = "ผู้ช่วย"
 		}
-		lines = append(lines, who+": "+content)
+		lines = append(lines, turnStamp(history[i].At)+who+": "+content)
 	}
 	// The walk was newest-first; the model reads oldest-first.
 	for left, right := 0, len(lines)-1; left < right; left, right = left+1, right-1 {
@@ -499,7 +510,19 @@ func formatHistory(history []Turn) string {
 	if len(lines) == 0 {
 		return index + "\n"
 	}
-	return index + "\nบทสนทนาก่อนหน้า:\n" + strings.Join(lines, "\n") + "\n"
+	return index + "\nบทสนทนาก่อนหน้า (วันเวลาในวงเล็บคือตอนที่พูด):\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// thaiShortMonths are the abbreviations a Thai owner reads a date in.
+var thaiShortMonths = [...]string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+
+// turnStamp is the "[6 ก.ย. 20:18] " in front of a history line, or nothing
+// when the turn has no time (history the client sent, tests).
+func turnStamp(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("[%d %s %02d:%02d] ", at.Day(), thaiShortMonths[at.Month()-1], at.Hour(), at.Minute())
 }
 
 // formatThreadIndex lists the turns that did not fit the verbatim budget: what
@@ -543,7 +566,7 @@ func formatThreadIndex(older []Turn) string {
 		if runes := []rune(question); len(runes) > threadIndexQuestionMaxChars {
 			question = string(runes[:threadIndexQuestionMaxChars]) + "…"
 		}
-		line := "· ถาม “" + question + "”" + context
+		line := "· " + turnStamp(turn.At) + "ถาม “" + question + "”" + context
 		if topic := strings.TrimSpace(turn.Topic); topic != "" {
 			line += " — เรื่อง" + topic
 		}

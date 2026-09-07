@@ -1,6 +1,10 @@
 package service
 
-import "Project-M/internal/aitools"
+import (
+	"time"
+
+	"Project-M/internal/aitools"
+)
 
 type AIIntent string
 
@@ -32,6 +36,9 @@ type AIConversationMessage struct {
 	// window still appears in the thread index. Never sent to or accepted from the
 	// client — the client has no tool metadata to put in it.
 	Topic string `json:"-"`
+	// At is when a stored turn was said, so the prompt can date each history
+	// line; zero for history the client sent. Server-side only, like Topic.
+	At time.Time `json:"-"`
 }
 
 type AIAskResponse struct {
