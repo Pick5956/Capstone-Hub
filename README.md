@@ -16,7 +16,7 @@
     <img src="https://img.shields.io/badge/React-19.2-149eca?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
     <img src="https://img.shields.io/badge/Go-1.24-00add8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24" />
     <img src="https://img.shields.io/badge/PostgreSQL-16-4169e1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL 16" />
-    <img src="https://img.shields.io/badge/Expo-54-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo 54" />
+    <img src="https://img.shields.io/badge/Expo-57-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo 57" />
   </p>
 </div>
 
@@ -80,7 +80,7 @@ flowchart TB
 | Web frontend | Next.js 16 App Router, React 19, TypeScript, Tailwind CSS v4, Recharts |
 | Backend API | Go 1.24, Gin, GORM |
 | Database | PostgreSQL 16 |
-| Mobile | Expo 54, React Native 0.81, Expo Router |
+| Mobile | Expo 57, React Native 0.86, Expo Router |
 | Auth | JWT, Google Identity Services, restaurant-scoped authorization |
 | AI | Gemini API through the Go backend |
 | Deployment helpers | Docker Compose, Nginx, PgBouncer, Cloudflare Tunnel scripts |

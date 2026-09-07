@@ -1207,18 +1207,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   backgroundPreviewOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: palette.surfaceSubtle,
   },
   cropLoading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: palette.surfaceSubtle,
   },
   cropBorder: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.68)',
   },

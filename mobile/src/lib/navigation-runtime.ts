@@ -392,6 +392,23 @@ export function getNavigationIndexByRouteName(
   );
 }
 
+// The route name a JUMP_TO for this item has to carry.
+//
+// The tabs navigator names its routes after the files in app/(primary), so the
+// name is the item's href, not its key. Those agree for every primary tab
+// except "pos", whose screen is tables.tsx: dispatching its key asks for a
+// route named "pos" that no navigator has, and React Navigation answers with
+// "The action 'JUMP_TO' with payload {\"name\":\"pos\"} was not handled by any
+// navigator" while the tab stays where it was.
+//
+// getNavigationIndexByRouteName already accepts either spelling on the way
+// back, which is why the mismatch only ever showed on the outbound trip.
+export function getNavigationRouteName(
+  item: NavigationItemWithRouteName,
+): string {
+  return item.href.replace(/^\/+|\/+$/g, '');
+}
+
 export function getPagerSceneTranslateXFromPosition(
   sceneIndex: number,
   pagerPosition: number,

@@ -41,6 +41,7 @@ import {
 import {
   getAdjacentNavigationTarget,
   getNavigationIndexByRouteName,
+  getNavigationRouteName,
   isPagerSwipeCooldownActive,
   notePagerVerticalScrollActivity,
   resolvePagerAnimationDuration,
@@ -294,7 +295,7 @@ function PrimaryPager({
 
     tabs.navigation.dispatch({
       type: 'JUMP_TO',
-      payload: { name: target.key },
+      payload: { name: getNavigationRouteName(target) },
     });
 
     if (targetIndex === activeIndexRef.current) {

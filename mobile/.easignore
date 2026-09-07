@@ -35,3 +35,9 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .DS_Store
+
+# Workspace agent notes - not part of the app, and the archive checklist in
+# docs/wiki/gotchas/eas-windows-monorepo-archive.md says they must not ship.
+AGENTS.md
+CLAUDE.md
+dist-webtest/
