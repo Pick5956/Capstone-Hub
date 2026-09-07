@@ -87,6 +87,22 @@ export interface MenuImageUploadFile {
   type: string;
 }
 
+/**
+ * What Expo's fetch will actually accept as a multipart part.
+ *
+ * SDK 57 replaced the global fetch with a spec-compliant implementation that
+ * takes only strings, Blobs, or objects exposing bytes(). React Native's
+ * { uri, name, type } shape - which every version before this accepted - now
+ * throws "Unsupported FormDataPart implementation", so the caller reads the
+ * file and hands over this instead. `name` and `type` still drive the part's
+ * filename and content-type headers.
+ */
+export interface MenuImageUploadPart {
+  name: string;
+  type: string;
+  bytes: () => Promise<Uint8Array>;
+}
+
 export const MENU_IMAGE_UPLOAD_PATH = '/api/v1/menu-items/upload-image';
 export const MENU_IMAGE_BACKGROUND_PREVIEW_PATH = '/api/v1/menu-items/preview-background';
 export const MENU_IMAGE_UPLOAD_FIELD = 'image';
@@ -166,7 +182,7 @@ export function menuImageBackgroundStrengthFromTrackPosition(
 
 export function appendMenuImageBackgroundPreview(
   formData: Pick<FormData, 'append'>,
-  file: MenuImageUploadFile,
+  file: MenuImageUploadFile | MenuImageUploadPart,
   backgroundStrength: number,
 ) {
   formData.append(MENU_IMAGE_UPLOAD_FIELD, file as unknown as Blob);
@@ -178,7 +194,7 @@ export function appendMenuImageBackgroundPreview(
 
 export function appendMenuImageUpload(
   formData: Pick<FormData, 'append'>,
-  file: MenuImageUploadFile,
+  file: MenuImageUploadFile | MenuImageUploadPart,
   options: MenuImageBackgroundOptions = {
     removeBackground: false,
     backgroundStrength: MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT,
