@@ -48,7 +48,7 @@ type AIActionPlanItemResponse struct {
 // the whole turn for the order dropped the question with no trace, and the owner
 // got a request for a quantity instead of the number they asked for.
 func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request *AIAskRequest, response *AIAskResponse) (handled bool, clarify string) {
-	if s.actionPlanStore == nil || s.actionIngredients == nil || s.repo == nil {
+	if !s.canHandleJoyboyStockCommands() {
 		return false, ""
 	}
 	// No keyword gate. Deciding whether a sentence is a command is exactly the
@@ -57,6 +57,18 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	// anything that is not a command, which costs one small call and keeps every
 	// way of saying it working.
 	drafts, err := s.ExtractStockCommands(request.Question, request.History)
+	return s.handleJoyboyStockDrafts(actor, request, response, drafts, err)
+}
+
+// canHandleJoyboyStockCommands says whether the command path is wired at all.
+func (s *AIService) canHandleJoyboyStockCommands() bool {
+	return s.actionPlanStore != nil && s.actionIngredients != nil && s.repo != nil
+}
+
+// handleJoyboyStockDrafts is the command path from the extractor's drafts on:
+// the same code whether the drafts were read just now or, in parallel mode,
+// while joyboy was choosing its tools.
+func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAskRequest, response *AIAskResponse, drafts []AIStockCommandDraft, err error) (handled bool, clarify string) {
 	if err != nil || len(drafts) == 0 {
 		return false, ""
 	}

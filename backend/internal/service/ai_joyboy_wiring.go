@@ -89,6 +89,10 @@ type joyboyTools struct {
 	service      *AIService
 	restaurantID uint
 
+	// periodReader, when set, is a period read that was started before the
+	// tool choice (AI_JOYBOY_PARALLEL); nil means read it now, as before.
+	periodReader salesWindowReader
+
 	// forecast carries chart-ready data back out of the tool run: joyboy's answer
 	// channel is text-only (joyboy.Answer), so when the forecast tool runs it
 	// stashes its structured result here on the struct that askJoyboy owns, and
@@ -208,9 +212,18 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 // be reached. Go still validates the dates and writes the label the owner reads:
 // the model says WHICH range, never what the figures in it are. The extra call
 // is small and runs at low effort.
+// readPeriod is every tool's way to the model's period read: the one started
+// early when the parallel preflight is on, a fresh call otherwise.
+func (t *joyboyTools) readPeriod(question string, history []AIConversationMessage, now time.Time) (datedSalesRequest, bool) {
+	if t.periodReader != nil {
+		return t.periodReader(question, history, now)
+	}
+	return t.service.resolveDatedSalesWithModel(question, history, now)
+}
+
 func (t *joyboyTools) periodNamedIn(question string) (start, end time.Time, label string, named bool) {
 	now := repository.BangkokNow()
-	if request, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok &&
+	if request, ok := t.readPeriod(question, t.history, now); ok &&
 		len(request.periods) > 0 && strings.TrimSpace(request.clarify) == "" {
 		period := request.periods[0]
 		aiStage("flow", "joyboy: period read by the model → %s", period.Label)
@@ -645,7 +658,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		now := repository.BangkokNow()
 		// The model reads the range, Go checks it, the month word list is the
 		// fallback — see resolveSalesWindow for why the order matters.
-		req, isDated := resolveSalesWindow(question, t.history, now, t.service.resolveDatedSalesWithModel)
+		req, isDated := resolveSalesWindow(question, t.history, now, t.readPeriod)
 		if isDated {
 			if strings.TrimSpace(req.clarify) != "" {
 				return req.clarify, true, true
@@ -897,12 +910,32 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// do not any more: one road, one boundary, and "ต้มยำกุ้งหมดแล้ว เอาลงก่อน"
 	// works for the same reason "เอาหมูสับเข้าคลัง 2 กิโล" does.
 	actionResponse := &AIAskResponse{Intent: AIIntentChat, Task: AITaskGeneralChat, Model: "joyboy"}
-	handled, pendingClarification := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
-	if handled {
-		return actionResponse, nil
+	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID, history: request.History}
+
+	// Serial (default): read the command first, and only go on to answer when
+	// the sentence was not one. Parallel (AI_JOYBOY_PARALLEL): start the command
+	// read and the period read now, let joyboy choose its tools meanwhile, and
+	// look at the drafts once the answer is back — see ai_joyboy_parallel.go.
+	var draftsCh chan joyboyDraftsResult
+	var pendingClarification string
+	if aiJoyboyParallelEnabled() {
+		aiStage("flow", "joyboy: parallel preflight — command drafts and period read alongside the tool choice")
+		if s.canHandleJoyboyStockCommands() {
+			draftsCh = make(chan joyboyDraftsResult, 1)
+			go func() {
+				drafts, err := s.ExtractStockCommands(request.Question, request.History)
+				draftsCh <- joyboyDraftsResult{drafts: drafts, err: err}
+			}()
+		}
+		tools.periodReader = newJoyboyPeriodFuture(request.Question, request.History, repository.BangkokNow(), s.resolveDatedSalesWithModel).read
+	} else {
+		handled, clarify := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
+		if handled {
+			return actionResponse, nil
+		}
+		pendingClarification = clarify
 	}
 
-	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID, history: request.History}
 	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {
 		aiStage("flow", format, args...)
 	})
@@ -910,13 +943,42 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		return nil, err
 	}
 
-	answer, err := assistant.Ask(ctx, joyboy.Request{
+	joyboyRequest := joyboy.Request{
 		Question:   request.Question,
 		History:    joyboyHistory(request.History),
 		Digest:     request.Digest,
 		OwnerTitle: s.preferencesFor(actor.RestaurantID).OwnerTitle,
 		Today:      joyboyTodayContext(repository.BangkokNow()),
-	})
+	}
+	var answer joyboy.Answer
+	if draftsCh == nil {
+		answer, err = assistant.Ask(ctx, joyboyRequest)
+	} else {
+		// Parallel mode: joyboy works in the background while the drafts come
+		// in. A sentence that turns out to be a command takes the command path
+		// the moment the drafts say so, and the answer joyboy was writing is
+		// cancelled — a command used to cost one call, and still does.
+		type askResult struct {
+			answer joyboy.Answer
+			err    error
+		}
+		askCtx, cancelAsk := context.WithCancel(ctx)
+		defer cancelAsk()
+		askCh := make(chan askResult, 1)
+		go func() {
+			a, e := assistant.Ask(askCtx, joyboyRequest)
+			askCh <- askResult{answer: a, err: e}
+		}()
+		result := <-draftsCh
+		handled, clarify := s.handleJoyboyStockDrafts(actor, request, actionResponse, result.drafts, result.err)
+		if handled {
+			cancelAsk()
+			return actionResponse, nil
+		}
+		pendingClarification = clarify
+		asked := <-askCh
+		answer, err = asked.answer, asked.err
+	}
 	if err != nil {
 		if errors.Is(err, joyboy.ErrUnavailable) {
 			aiStage("warn", "joyboy: %v", err)
