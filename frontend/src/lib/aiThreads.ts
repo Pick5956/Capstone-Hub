@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { clearStoredChat, loadStoredMessages, saveMessages, type ChatWriteSource } from "./aiChatStorage";
 import { getAnswerChips, type AIGuidedAction } from "./aiGuidedActions";
-import type { AIChartData, AIConversationTurn, AIForecastResult, AISystemDocSource } from "../types/ai";
+import type { AIChartData, AIConversationTurn, AIForecastResult, AINavigation, AISystemDocSource } from "../types/ai";
 import type { Membership } from "../types/restaurant";
 
 // Many chats per owner.
@@ -220,6 +220,7 @@ export type AITurnDisplay = {
   action_plan_id?: string;
   model?: string;
   follow_ups?: string[];
+  navigate?: AINavigation;
 };
 
 /** One exchange of a reopened chat, in the shape both chat surfaces render. */
@@ -237,6 +238,7 @@ export type AIThreadMessage = {
   docSources?: AISystemDocSource[];
   planId?: string;
   followUps?: string[];
+  navigate?: AINavigation;
 };
 
 /**
@@ -264,6 +266,7 @@ export function turnsToMessages(turns: AIConversationTurn[]): AIThreadMessage[] 
       docSources: display.doc_sources,
       planId: display.action_plan_id,
       followUps: display.follow_ups,
+      navigate: display.navigate,
     });
   }
   return messages;
@@ -289,7 +292,7 @@ export function hydrateThreadMessages(
     }
     const question = index > 0 ? messages[index - 1].content : "";
     const tools = message.toolsUsed && message.toolsUsed.length > 0 ? message.toolsUsed : message.tool;
-    const actions = getAnswerChips(question, message.content, membership, language, tools, message.scopeAssumed, message.followUps);
+    const actions = getAnswerChips(question, message.content, membership, language, tools, message.scopeAssumed, message.followUps, message.navigate);
     out.push(actions.length > 0 ? { ...message, actions } : message);
   }
   return out;

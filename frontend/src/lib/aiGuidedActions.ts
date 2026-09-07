@@ -1,5 +1,6 @@
 import { can } from "@/src/lib/rbac";
 import type { Membership } from "@/src/types/restaurant";
+import type { AINavigation } from "@/src/types/ai";
 
 export type AIGuidedAction = {
   id: string;
@@ -121,14 +122,22 @@ export function getAnswerChips(
   tool?: string | string[],
   scopeAssumed?: boolean,
   followUps?: string[],
+  navigate?: AINavigation | null,
 ): AIGuidedAction[] {
+  // "Take me there" goes first: when an answer explained a page, going to
+  // it is the most likely next tap, and it is the one chip that is a link.
+  const go: AIGuidedAction[] = navigate?.href
+    ? [{ id: "nav-answer", href: navigate.href, label: language === "th" ? `พาไปหน้า${navigate.label}` : `Go to ${navigate.label}` }]
+    : [];
   const written = (followUps ?? []).map((text) => text.trim()).filter(Boolean);
-  if (written.length === 0) return getGuidedActions(question, answer, membership, language, tool, scopeAssumed);
+  if (written.length === 0) {
+    return [...go, ...getGuidedActions(question, answer, membership, language, tool, scopeAssumed)].slice(0, MAX_ANSWER_CHIPS);
+  }
   const pivots = scopeAssumed
     ? getGuidedActions(question, answer, membership, language, tool, scopeAssumed).filter((action) => action.id.startsWith("fu-scope-"))
     : [];
   const chips = written.map((text, index) => ({ id: `fu-model-${index}`, label: text, prompt: text }));
-  return [...pivots, ...chips].slice(0, MAX_ANSWER_CHIPS);
+  return [...go, ...pivots, ...chips].slice(0, MAX_ANSWER_CHIPS);
 }
 
 export function getGuidedActions(

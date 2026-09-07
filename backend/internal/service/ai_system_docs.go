@@ -658,3 +658,31 @@ func escapeSystemDocMarkdown(value string) string {
 	)
 	return replacer.Replace(strings.TrimSpace(value))
 }
+
+// systemDocsRoute finds the handbook page a path names, so a path the writer
+// copied out of the handbook can be shown as a button and one it made up
+// cannot. Matching is on the path alone, trailing slash ignored; the label
+// comes back in the language asked for.
+func systemDocsRoute(href, language string) (*AINavigation, bool) {
+	want := strings.TrimRight(strings.TrimSpace(href), "/")
+	if want == "" {
+		return nil, false
+	}
+	catalog, err := systemdocs.Load()
+	if err != nil {
+		return nil, false
+	}
+	for _, article := range catalog.Articles {
+		for _, route := range article.Routes {
+			if strings.TrimRight(strings.TrimSpace(route.Href), "/") != want {
+				continue
+			}
+			label := strings.TrimSpace(route.Label.ForLanguage(language))
+			if label == "" {
+				label = want
+			}
+			return &AINavigation{Href: want, Label: label}, true
+		}
+	}
+	return nil, false
+}

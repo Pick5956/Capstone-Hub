@@ -1051,6 +1051,15 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// they followed an answer the owner will not read.
 	if len(answer.Tools) > 0 || strings.TrimSpace(pendingClarification) == "" {
 		response.FollowUps = answer.FollowUps
+		// The page the answer explained, only if the handbook really has it:
+		// a path the model made up is dropped here, not shown as a dead button.
+		if path := strings.TrimSpace(answer.NavigateTo); path != "" {
+			if route, ok := systemDocsRoute(path, detectSystemDocsLanguage(request.Question)); ok {
+				response.Navigate = route
+			} else {
+				aiStage("warn", "joyboy: the writer named a page the handbook does not have (%q) → no button", path)
+			}
+		}
 	}
 	// The tools that actually produced data, named for the client.
 	//

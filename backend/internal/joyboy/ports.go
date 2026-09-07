@@ -152,4 +152,8 @@ type Answer struct {
 	// owner's words, taken from the end of the same reply. Empty when the
 	// model left them out.
 	FollowUps []string
+	// NavigateTo is the page the answer was explaining, as the path the
+	// writer copied from the handbook ("/expenses"), when it named one. The
+	// caller checks it against the handbook before showing a button.
+	NavigateTo string
 }

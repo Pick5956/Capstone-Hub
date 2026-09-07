@@ -14,7 +14,7 @@ import (
 // at the three the screen can show.
 func TestSplitFollowUpsTakesTheBlockOffTheEnd(t *testing.T) {
 	raw := "ปีกไก่เหลือ 417 กรัม ใกล้หมดครับ\n\n===ถามต่อ===\n- ปีกไก่พอถึงเมื่อไหร่\n2. สั่งปีกไก่เพิ่ม 5 กิโล\n\n\"เมนูไหนใช้ปีกไก่\"\nข้อที่สี่ที่จอไม่มีที่ให้\n"
-	answer, followUps := splitFollowUps(raw)
+	answer, followUps, _ := splitFollowUps(raw)
 	if strings.Contains(answer, "ถามต่อ") || strings.Contains(answer, "ปีกไก่พอถึง") {
 		t.Fatalf("the block stayed in the answer: %q", answer)
 	}
@@ -30,7 +30,7 @@ func TestSplitFollowUpsTakesTheBlockOffTheEnd(t *testing.T) {
 }
 
 func TestSplitFollowUpsLeavesAReplyWithoutTheBlockAlone(t *testing.T) {
-	answer, followUps := splitFollowUps("ยอดขายวันนี้ 5,000 บาทครับ")
+	answer, followUps, _ := splitFollowUps("ยอดขายวันนี้ 5,000 บาทครับ")
 	if answer != "ยอดขายวันนี้ 5,000 บาทครับ" || followUps != nil {
 		t.Fatalf("answer = %q, follow-ups = %v", answer, followUps)
 	}
@@ -64,5 +64,25 @@ func TestAskReturnsTheWritersFollowUps(t *testing.T) {
 	}
 	if !strings.Contains(answerPrompt("สวัสดี", nil, "", ""), followUpMarker) {
 		t.Error("the no-data template does not ask for follow-ups")
+	}
+}
+
+// A how-to answer may end its block with the page it was explaining. The
+// path is kept apart from the questions and never shown as one.
+func TestSplitFollowUpsKeepsThePageLineApart(t *testing.T) {
+	raw := "กดเพิ่มรายจ่ายที่มุมขวาบนครับ\n===ถามต่อ===\nดูรายจ่ายเดือนนี้\nรายจ่ายหมวดไหนเยอะสุด\nบันทึกค่าไฟ\nไปหน้า /expenses\n"
+	answer, followUps, navigateTo := splitFollowUps(raw)
+	if navigateTo != "/expenses" {
+		t.Fatalf("navigateTo = %q", navigateTo)
+	}
+	if len(followUps) != 3 || strings.Contains(strings.Join(followUps, "|"), "ไปหน้า") {
+		t.Fatalf("follow-ups = %q", followUps)
+	}
+	if strings.Contains(answer, "ไปหน้า") {
+		t.Fatalf("the page line leaked into the answer: %q", answer)
+	}
+	// Not a path: ignored, not shown as a question either.
+	if _, ups, nav := splitFollowUps("x\n===ถามต่อ===\nไปหน้า จัดการเมนู\nถามอะไรดี"); nav != "" || len(ups) != 1 {
+		t.Fatalf("a page line without a path should be dropped: nav=%q ups=%q", nav, ups)
 	}
 }

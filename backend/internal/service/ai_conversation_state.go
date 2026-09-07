@@ -346,6 +346,7 @@ type aiTurnDisplay struct {
 	ActionPlanID string              `json:"action_plan_id,omitempty"`
 	Model        string              `json:"model,omitempty"`
 	FollowUps    []string            `json:"follow_ups,omitempty"`
+	Navigate     *AINavigation       `json:"navigate,omitempty"`
 }
 
 func aiTurnDisplayFor(response *AIAskResponse) aiTurnDisplay {
@@ -357,6 +358,7 @@ func aiTurnDisplayFor(response *AIAskResponse) aiTurnDisplay {
 		DocSources:   response.DocSources,
 		Model:        response.Model,
 		FollowUps:    response.FollowUps,
+		Navigate:     response.Navigate,
 	}
 	if response.ActionPlan != nil {
 		display.ActionPlanID = response.ActionPlan.ID

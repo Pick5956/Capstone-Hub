@@ -238,6 +238,9 @@ const answerTemplate = joyboyPersona + `
 - **บรรทัด capability=read_only แปลว่าเครื่องมือนั้นดูได้อย่างเดียว**
   ถ้าผู้ใช้ขอให้ทำอะไรกับมัน ห้ามบอกว่าทำให้แล้ว ให้บอกว่าต้องไปกดเองในหน้านั้น
 - ชื่อในวงเล็บเหลี่ยม เช่น [get_sales_trend] เป็นชื่อเครื่องมือภายในระบบ ห้ามเอ่ยถึง
+- บรรทัด "หน้าที่ใช้: ชื่อ (/path)" ในคู่มือมีไว้ให้คุณรู้ว่าเรื่องนั้นอยู่หน้าไหน
+  **ห้ามลอกบรรทัดนั้นลงคำตอบ** ให้พูดเป็นคำ เช่น "ไปที่หน้าบันทึกรายจ่าย" และใส่ path ไว้ในบรรทัด ไปหน้า ท้ายบล็อกถามต่อแทน
+  ระบบจะทำเป็นปุ่มให้กดเอง
 
 ข้อห้าม:
 - ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง **ห้ามแต่งตัวเลขที่ไม่มีอยู่**
@@ -288,6 +291,9 @@ const answerTemplate = joyboyPersona + `
 - ถ้าคำตอบของคุณเป็นการถามกลับเพื่อขอความชัดเจน ให้สามบรรทัดนั้นเป็นคำตอบที่เจ้าของน่าจะเลือก
   เช่นถามว่า "หมายถึงสัปดาห์นี้หรือสัปดาห์ก่อน" → "สัปดาห์นี้" / "สัปดาห์ก่อน" / "ทั้งสองสัปดาห์"
 - ถ้าเป็นการคุยเล่นหรือเรื่องทั่วไป ให้ชวนกลับมาเรื่องร้านด้วยคำถามที่ระบบตอบได้
+- **ถ้าคำตอบอธิบายวิธีใช้หน้าใดหน้าหนึ่งของระบบ** (ข้อมูลคู่มือมีบรรทัด "หน้าที่ใช้: ชื่อ (/path)")
+  ให้เพิ่มบรรทัดที่ 4 ต่อจากสามคำถามว่า ไปหน้า /path — ใช้ path ตามที่คู่มือเขียนเป๊ะ ๆ ห้ามแต่งเอง
+  ระบบจะทำเป็นปุ่ม "พาไปหน้านั้น" ให้เจ้าของกด · ถ้าไม่ได้อธิบายวิธีใช้หน้าไหน ไม่ต้องมีบรรทัดนี้
 
 %s
 ข้อมูลที่ระบบคำนวณมาแล้ว (ใช้ตอบจากตรงนี้):
@@ -376,6 +382,9 @@ const noDataAnswerTemplate = joyboyPersona + `
 - ถ้าคำตอบของคุณเป็นการถามกลับเพื่อขอความชัดเจน ให้สามบรรทัดนั้นเป็นคำตอบที่เจ้าของน่าจะเลือก
   เช่นถามว่า "หมายถึงสัปดาห์นี้หรือสัปดาห์ก่อน" → "สัปดาห์นี้" / "สัปดาห์ก่อน" / "ทั้งสองสัปดาห์"
 - ถ้าเป็นการคุยเล่นหรือเรื่องทั่วไป ให้ชวนกลับมาเรื่องร้านด้วยคำถามที่ระบบตอบได้
+- **ถ้าคำตอบอธิบายวิธีใช้หน้าใดหน้าหนึ่งของระบบ** (ข้อมูลคู่มือมีบรรทัด "หน้าที่ใช้: ชื่อ (/path)")
+  ให้เพิ่มบรรทัดที่ 4 ต่อจากสามคำถามว่า ไปหน้า /path — ใช้ path ตามที่คู่มือเขียนเป๊ะ ๆ ห้ามแต่งเอง
+  ระบบจะทำเป็นปุ่ม "พาไปหน้านั้น" ให้เจ้าของกด · ถ้าไม่ได้อธิบายวิธีใช้หน้าไหน ไม่ต้องมีบรรทัดนี้
 
 %s
 คำถามของเจ้าของร้าน:
@@ -393,14 +402,18 @@ var followUpPrefix = regexp.MustCompile(`^\s*(?:[-•*·]|\d+[.)])\s*`)
 // exactly this many.
 const maxFollowUps = 3
 
+// navigatePrefix opens the optional last line of the block: the page the
+// answer was explaining, as a path from the handbook ("ไปหน้า /expenses").
+const navigatePrefix = "ไปหน้า"
+
 // splitFollowUps takes the follow-up block off the end of a raw reply. What the
 // model wrote there is kept as written — the rules for what makes a good
 // follow-up live in the prompt, not here — apart from list markers, blank
 // lines, and anything past the third question, which the screen cannot show.
-func splitFollowUps(raw string) (answer string, followUps []string) {
+func splitFollowUps(raw string) (answer string, followUps []string, navigateTo string) {
 	at := strings.LastIndex(raw, followUpMarker)
 	if at < 0 {
-		return raw, nil
+		return raw, nil, ""
 	}
 	answer = raw[:at]
 	for _, line := range strings.Split(raw[at+len(followUpMarker):], "\n") {
@@ -409,12 +422,19 @@ func splitFollowUps(raw string) (answer string, followUps []string) {
 		if line == "" {
 			continue
 		}
-		followUps = append(followUps, line)
-		if len(followUps) == maxFollowUps {
-			break
+		// The page line is kept apart from the questions, wherever it landed.
+		if strings.HasPrefix(line, navigatePrefix) {
+			if path := strings.TrimSpace(strings.TrimPrefix(line, navigatePrefix)); strings.HasPrefix(path, "/") && navigateTo == "" {
+				navigateTo = path
+			}
+			continue
 		}
+		if len(followUps) == maxFollowUps {
+			continue
+		}
+		followUps = append(followUps, line)
 	}
-	return answer, followUps
+	return answer, followUps, navigateTo
 }
 
 

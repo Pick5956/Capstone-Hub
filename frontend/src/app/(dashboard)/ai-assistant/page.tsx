@@ -429,8 +429,8 @@ export default function AIAssistantPage() {
       // question they are the answers to pick from. The fixed lists are the
       // fallback for a reply that came without them.
       const actions =
-        data.follow_ups && data.follow_ups.length > 0
-          ? getAnswerChips(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed, data.follow_ups)
+        (data.follow_ups && data.follow_ups.length > 0) || data.navigate
+          ? getAnswerChips(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed, data.follow_ups, data.navigate)
           : data.intent === "unclear"
             ? getUnclearRequestActions(activeMembership, language)
             : data.intent === "analysis"

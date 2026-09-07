@@ -77,6 +77,16 @@ type AIAskResponse struct {
 	// the owner's words at the end of the same reply. The client shows them as
 	// chips under the answer; tapping one sends it verbatim.
 	FollowUps      []string                 `json:"follow_ups,omitempty"`
+	// Navigate is the page a how-to answer was about, checked against the
+	// handbook: the client shows it as a "take me there" button.
+	Navigate       *AINavigation            `json:"navigate,omitempty"`
+}
+
+// AINavigation is one page of the app, by path and by the name the owner
+// reads on the button.
+type AINavigation struct {
+	Href  string `json:"href"`
+	Label string `json:"label"`
 }
 
 type AIPlannerMetadata struct {

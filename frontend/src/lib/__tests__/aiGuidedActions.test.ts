@@ -163,3 +163,19 @@ describe("getAnswerChips", () => {
     expect(chips.length).toBeLessThanOrEqual(5);
   });
 });
+
+describe("getAnswerChips with a page to go to", () => {
+  it("puts the take-me-there link first, then the model's questions", () => {
+    const chips = getAnswerChips("บันทึกรายจ่ายยังไง", "กดปุ่มเพิ่ม…", ownerMembership, "th", ["search_system_docs"], false, ["ดูรายจ่ายเดือนนี้"], {
+      href: "/expenses",
+      label: "บันทึกรายจ่าย",
+    });
+    expect(chips[0]).toEqual({ id: "nav-answer", href: "/expenses", label: "พาไปหน้าบันทึกรายจ่าย" });
+    expect(chips[1]?.prompt).toBe("ดูรายจ่ายเดือนนี้");
+  });
+
+  it("still offers the link when the model wrote no questions", () => {
+    const chips = getAnswerChips("เพิ่มเมนูยังไง", "", ownerMembership, "en", ["search_system_docs"], false, [], { href: "/menu", label: "Manage menu" });
+    expect(chips[0]).toEqual({ id: "nav-answer", href: "/menu", label: "Go to Manage menu" });
+  });
+});

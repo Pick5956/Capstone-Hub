@@ -66,7 +66,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	sheet := buildFactSheet(results)
-	text, followUps, err := a.write(ctx, question, request.History, todayLine(request.Today)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet, request.OnDraft)
+	text, followUps, navigateTo, err := a.write(ctx, question, request.History, todayLine(request.Today)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet, request.OnDraft)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -77,7 +77,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	// exists for. Reporting the request instead told that guard a tool had run,
 	// so it stood down and let an unbacked claim through: "ได้จองโต๊ะ P01 ให้แล้ว"
 	// over a booking that never happened.
-	return Answer{Text: text, Tools: answeredTools(results), FollowUps: followUps}, nil
+	return Answer{Text: text, Tools: answeredTools(results), FollowUps: followUps, NavigateTo: navigateTo}, nil
 }
 
 // answeredTools lists the tools that came back with something to say, in the
@@ -104,10 +104,10 @@ func answeredTools(results []ToolResult) []string {
 // owner still read the invented number. Naming the figure back to the model gets
 // a clean answer, and it fires rarely enough — once in about twenty-five
 // questions here — to be worth the extra call when it does.
-func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string, onDraft func(string)) (string, []string, error) {
-	text, followUps, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet, onDraft)
+func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string, onDraft func(string)) (string, []string, string, error) {
+	text, followUps, navigateTo, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet, onDraft)
 	if err != nil {
-		return text, nil, err
+		return text, nil, "", err
 	}
 	// Reported, not rewritten.
 	//
@@ -129,14 +129,14 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 	for _, figure := range unmatched {
 		a.log("joyboy: answer figure %q is not in the fact sheet — derived, or invented", figure)
 	}
-	return text, followUps, nil
+	return text, followUps, navigateTo, nil
 }
 
 // writeOnce gives the model exactly one second chance. That retry is for a reply
 // that arrived empty or as nothing but a wrapper, which a model does
 // occasionally and does not repeat; anything worse than that is an outage and is
 // reported as one.
-func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string, onDraft func(string)) (string, []string, []string, error) {
+func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string, onDraft func(string)) (string, []string, string, []string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 2; attempt++ {
 		raw, err := a.completeAnswer(ctx, prompt, onDraft)
@@ -147,18 +147,18 @@ func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string, onDraft
 		}
 		// The follow-up questions come off the end first, so the cleaning and
 		// the figure check below see only the answer the owner reads.
-		body, followUps := splitFollowUps(raw)
+		body, followUps, navigateTo := splitFollowUps(raw)
 		if text := cleanAnswer(body); text != "" {
 			// The fact sheet is the dictionary of correct figures: normalise the
 			// separators of any figure that matches it, and report any large one
 			// that matches nothing.
 			text, unmatched := reconcileFigures(text, sheet)
-			return text, followUps, unmatched, nil
+			return text, followUps, navigateTo, unmatched, nil
 		}
 		lastErr = errors.New("the model returned nothing usable")
 		a.log("joyboy: attempt %d produced nothing usable", attempt)
 	}
-	return "", nil, nil, fmt.Errorf("%w: writing the answer: %w", ErrUnavailable, lastErr)
+	return "", nil, "", nil, fmt.Errorf("%w: writing the answer: %w", ErrUnavailable, lastErr)
 }
 
 // completeAnswer is the write call, streamed to onDraft when both sides can:

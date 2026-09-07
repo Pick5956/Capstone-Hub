@@ -245,6 +245,8 @@ export type AIActionPlanConfirmation = {
   items: AIActionPlanItemOutcome[];
 };
 
+export type AINavigation = { href: string; label: string };
+
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
@@ -271,6 +273,9 @@ export type AIAskResponse = {
   // Questions the model suggested asking next, in the owner's words. Shown as
   // chips under the answer; a tap sends the text verbatim.
   follow_ups?: string[];
+  // The page a how-to answer was about, checked by the server against the
+  // handbook. Shown as a "take me there" chip.
+  navigate?: AINavigation;
   planner?: {
     provider: "groq" | "gemini" | "local_clarification_fallback" | string;
     model?: string;
