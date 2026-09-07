@@ -47,9 +47,9 @@ type AIActionPlanItemResponse struct {
 // "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย" is a question and an order. Taking
 // the whole turn for the order dropped the question with no trace, and the owner
 // got a request for a quantity instead of the number they asked for.
-func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request *AIAskRequest, response *AIAskResponse) (handled bool, clarify string) {
+func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request *AIAskRequest, response *AIAskResponse) (handled bool, clarify string, options []string) {
 	if !s.canHandleJoyboyStockCommands() {
-		return false, ""
+		return false, "", nil
 	}
 	// No keyword gate. Deciding whether a sentence is a command is exactly the
 	// judgement the model is good at, and a keyword list can only ever cover the
@@ -68,9 +68,11 @@ func (s *AIService) canHandleJoyboyStockCommands() bool {
 // handleJoyboyStockDrafts is the command path from the extractor's drafts on:
 // the same code whether the drafts were read just now or, in parallel mode,
 // while joyboy was choosing its tools.
-func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAskRequest, response *AIAskResponse, drafts []AIStockCommandDraft, err error) (handled bool, clarify string) {
+// options are the tappable answers when the one thing asked is a choice from
+// a list Go knows; empty otherwise. They ride out as the reply's follow-ups.
+func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAskRequest, response *AIAskResponse, drafts []AIStockCommandDraft, err error) (handled bool, clarify string, options []string) {
 	if err != nil || len(drafts) == 0 {
-		return false, ""
+		return false, "", nil
 	}
 
 	// Actions off (or not the owner): say so rather than letting the answer round
@@ -84,13 +86,13 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-action-disabled"
-		return true, ""
+		return true, "", nil
 	}
 
 	shelf, err := s.actionIngredients.ListIngredients(actor.RestaurantID)
 	if err != nil {
 		aiStage("warn", "joyboy command: listing ingredients failed (%v) → answering normally", err)
-		return false, ""
+		return false, "", nil
 	}
 	// The menu catalogue is only fetched when something in the sentence is about a
 	// menu, so an inventory-only command costs exactly what it did before.
@@ -101,12 +103,12 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 			response.Intent = AIIntentChat
 			response.Task = AITaskGeneralChat
 			response.Model = "joyboy-command-unavailable"
-			return true, ""
+			return true, "", nil
 		}
 		menus, err = s.actionMenus.ListMenuItems(actor.RestaurantID, true, 0)
 		if err != nil {
 			aiStage("warn", "joyboy command: listing menus failed (%v) → answering normally", err)
-			return false, ""
+			return false, "", nil
 		}
 	}
 	// The categories, only when a new menu is being added — the one command
@@ -119,12 +121,12 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 			response.Intent = AIIntentChat
 			response.Task = AITaskGeneralChat
 			response.Model = "joyboy-command-unavailable"
-			return true, ""
+			return true, "", nil
 		}
 		categories, err = creator.ListCategories(actor.RestaurantID, false)
 		if err != nil {
 			aiStage("warn", "joyboy command: listing categories failed (%v) → answering normally", err)
-			return false, ""
+			return false, "", nil
 		}
 	}
 
@@ -133,6 +135,7 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 	acknowledged := make([]string, 0, len(drafts))
 	questions := make([]string, 0, 2)
 	notices := make([]string, 0, 2)
+	var choices []string
 	for _, draft := range drafts {
 		// Money in another currency is a question, whatever else the command
 		// says: the ledger keeps baht, and converting quietly wrote "5000 ดอล"
@@ -164,6 +167,9 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 			// asked; the owner's next message flows back through this path with the
 			// history attached.
 			questions = append(questions, resolution.Question)
+			if len(resolution.Options) > 0 && choices == nil {
+				choices = resolution.Options
+			}
 		}
 	}
 
@@ -173,6 +179,11 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 	// downstream compares them, so identical text is dropped here.
 	questions = aiDropRepeats(questions)
 	notices = aiDropRepeats(notices)
+	// Chips only when there is exactly one question and it is that choice:
+	// two questions with one set of answers under them would mislead.
+	if len(questions) != 1 {
+		choices = nil
+	}
 
 	// Anything unclear is asked before a plan is built, so the owner never
 	// confirms half of what they said without knowing.
@@ -186,7 +197,7 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		// what the next turn reads to rebuild the rest of the command, and burying
 		// it under an unrelated answer is how half an order goes missing.
 		if len(acknowledged) == 0 && len(commands) == 0 && len(notices) == 0 {
-			return false, strings.Join(questions, "\n")
+			return false, strings.Join(questions, "\n"), choices
 		}
 		lines := notices
 		// Say what was understood before asking about what was not. Without this the
@@ -200,7 +211,8 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		response.Intent = AIIntentUnclear
 		response.Task = AITaskUnclear
 		response.Model = "joyboy-command-clarify"
-		return true, ""
+		response.FollowUps = choices
+		return true, "", nil
 	}
 	if len(commands) == 0 {
 		if len(notices) > 0 {
@@ -208,9 +220,9 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 			response.Intent = AIIntentChat
 			response.Task = AITaskGeneralChat
 			response.Model = "joyboy-command-noop"
-			return true, ""
+			return true, "", nil
 		}
-		return false, ""
+		return false, "", nil
 	}
 
 	draft := BuildAdjustStockPlan(s.actionPorts(), actor.RestaurantID, commands, titles)
@@ -225,14 +237,14 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-action-type-off"
-		return true, ""
+		return true, "", nil
 	}
 	if len(draft.Items) == 0 {
 		response.Answer = aiRejectedItemsMessage(draft.Rejected)
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-rejected"
-		return true, ""
+		return true, "", nil
 	}
 
 	summary := aiStockPlanSummary(draft.Items, draft.Previews)
@@ -265,7 +277,7 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-already-pending"
-		return true, ""
+		return true, "", nil
 	}
 
 	plan, token, err := s.actionPlanStore.CreateAIActionPlan(repository.CreateAIActionPlanParams{
@@ -280,7 +292,7 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-failed"
-		return true, ""
+		return true, "", nil
 	}
 
 	items := make([]AIActionPlanItemResponse, 0, len(draft.Previews))
@@ -321,7 +333,7 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		Items:             items,
 		Warnings:          warnings,
 	}
-	return true, ""
+	return true, "", nil
 }
 
 // aiCommandAsSaid renders one understood command the way the owner said it, for

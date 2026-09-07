@@ -38,6 +38,10 @@ func TestResolveMenuCreateCommand(t *testing.T) {
 	if noCategory.Kind != AICommandOutcomeAsk || !strings.Contains(noCategory.Question, "ข้าว / เครื่องดื่ม") || strings.Contains(noCategory.Question, "เมนูเก่า") {
 		t.Fatalf("no category = %+v", noCategory)
 	}
+	// The categories are the answers: they come back as chips to tap.
+	if len(noCategory.Options) != 2 || noCategory.Options[0] != "ข้าว" || noCategory.Options[1] != "เครื่องดื่ม" {
+		t.Fatalf("options = %q", noCategory.Options)
+	}
 
 	// A partial category name that fits one category is that category.
 	near := ResolveMenuCreateCommand(menus, categories, AIStockCommandDraft{Name: "ชาเขียว", Kind: "menu_create", Quantity: 45, Category: "ดื่ม"})

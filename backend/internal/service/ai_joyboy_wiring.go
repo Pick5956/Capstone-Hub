@@ -928,6 +928,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// look at the drafts once the answer is back — see ai_joyboy_parallel.go.
 	var draftsCh chan joyboyDraftsResult
 	var pendingClarification string
+	var pendingOptions []string
 	if aiJoyboyParallelEnabled() {
 		aiStage("flow", "joyboy: parallel preflight — command drafts and period read alongside the tool choice")
 		if s.canHandleJoyboyStockCommands() {
@@ -939,11 +940,11 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		}
 		tools.periodReader = newJoyboyPeriodFuture(request.Question, request.History, repository.BangkokNow(), s.resolveDatedSalesWithModel).read
 	} else {
-		handled, clarify := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
+		handled, clarify, options := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
 		if handled {
 			return actionResponse, nil
 		}
-		pendingClarification = clarify
+		pendingClarification, pendingOptions = clarify, options
 	}
 
 	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {
@@ -981,12 +982,12 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 			askCh <- askResult{answer: a, err: e}
 		}()
 		result := <-draftsCh
-		handled, clarify := s.handleJoyboyStockDrafts(actor, request, actionResponse, result.drafts, result.err)
+		handled, clarify, options := s.handleJoyboyStockDrafts(actor, request, actionResponse, result.drafts, result.err)
 		if handled {
 			cancelAsk()
 			return actionResponse, nil
 		}
-		pendingClarification = clarify
+		pendingClarification, pendingOptions = clarify, options
 		asked := <-askCh
 		answer, err = asked.answer, asked.err
 	}
@@ -1049,6 +1050,11 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// The model's follow-ups go out as written. The one case they are dropped
 	// is when its whole answer was replaced by Go's clarifying question above:
 	// they followed an answer the owner will not read.
+	// A clarifying question that is a choice from a list Go knows carries the
+	// choices as its chips — tapping one answers it.
+	if strings.TrimSpace(pendingClarification) != "" && len(pendingOptions) > 0 {
+		response.FollowUps = pendingOptions
+	}
 	if len(answer.Tools) > 0 || strings.TrimSpace(pendingClarification) == "" {
 		response.FollowUps = answer.FollowUps
 		// The page the answer explained, only if the handbook really has it:

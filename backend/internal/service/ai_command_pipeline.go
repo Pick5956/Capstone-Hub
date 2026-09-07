@@ -168,6 +168,7 @@ func ResolveMenuCreateCommand(menus []entity.MenuItem, categories []entity.Categ
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
 			Question: fmt.Sprintf("“%s” จัดอยู่หมวดไหนครับ — %s", title, strings.Join(names, " / ")),
+			Options:  names,
 		}
 	}
 	return AICommandResolution{
@@ -297,6 +298,9 @@ type AICommandResolution struct {
 	Command  AIAdjustStockCommand // set when Kind is ready
 	Title    string               // the ingredient name as the owner said it
 	Question string               // set when Kind is ask or offer_create
+	// Options are the answers a question offers, when it is a choice from a
+	// list Go knows (a category): the screen shows them as chips to tap.
+	Options []string
 }
 
 // aiExpenseCategoryLabels turns the ledger's six stored categories into the
@@ -352,6 +356,7 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
 			Question: fmt.Sprintf("“%s” จัดเป็นรายจ่ายหมวดไหนครับ — %s", title, strings.Join(options, " / ")),
+			Options:  options,
 		}
 	}
 	if draft.Quantity < 0 {
