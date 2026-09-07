@@ -60,6 +60,13 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
   แต่ถ้าผู้ใช้บอกวันแบบพูด ๆ ("เมื่อวาน" "เมื่อวานซืน" "วันที่ 20") ให้คำนวณเป็นวันที่จริง
   โดยนับจากวันที่ปัจจุบันที่แจ้งไว้ข้างล่าง
 - ถ้าเดาหมวดไม่ออกจริง ๆ ให้ category เป็น "" ระบบจะถามเอง ห้ามเดามั่ว
+- **ถ้าเขาสั่งบันทึกรายจ่ายแต่ไม่บอกจำนวนเงิน ก็ยังเป็นคำสั่ง** ส่งมาด้วย quantity 0
+  ห้ามตอบ [] เพราะไม่มีตัวเลข ระบบจะถามจำนวนเงินเอง เช่น "บันทึกค่าไฟ" → name="ค่าไฟ" quantity=0
+สกุลเงิน (ใช้กับ expense · cost · menu_price):
+- quantity คือตัวเลขตามที่เขาพูด **ห้ามแปลงสกุลเงินเอง**
+- ถ้าเขาพูดเป็นเงินสกุลอื่นที่ไม่ใช่บาท (ดอลลาร์ ดอล USD เยน ยูโร ปอนด์ หยวน ริงกิต ฯลฯ)
+  ให้ใส่ช่อง "currency" เป็นรหัสสกุลเงิน เช่น "USD" "JPY" "EUR" ระบบจะถามเจ้าของว่าเป็นกี่บาท
+- เป็นบาท หรือไม่ได้บอกสกุลเงิน → ไม่ต้องใส่ currency
 
 กฎร่วม:
 - ถ้าผู้ใช้ไม่ได้บอกจำนวน ให้ quantity เป็น 0 · ถ้าไม่ได้บอกหน่วย ให้ unit เป็น ""
@@ -125,6 +132,12 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 
 ข้อความ: "เมื่อวานจ่ายค่าแรงพนักงาน 2 คน 1,200 บาท แล้วก็ซื้อกระทะใหม่ 1500"
 ตอบ: [{"name":"ค่าแรงพนักงาน","kind":"expense","quantity":1200,"unit":"","category":"labor","date":"","note":"ค่าแรงพนักงาน 2 คน"},{"name":"กระทะ","kind":"expense","quantity":1500,"unit":"","category":"equipment","date":"","note":"ซื้อกระทะใหม่"}]
+
+ข้อความ: "บันทึกค่าไฟ"
+ตอบ: [{"name":"ค่าไฟ","kind":"expense","quantity":0,"unit":"","category":"utilities","date":"","note":"ค่าไฟ"}]
+
+ข้อความ: "บันทึกค่าไฟ 5000 ดอล"
+ตอบ: [{"name":"ค่าไฟ","kind":"expense","quantity":5000,"unit":"","category":"utilities","date":"","note":"ค่าไฟ","currency":"USD"}]
 
 ข้อความ: "รับของA เข้า 5 กก. แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย"
 ตอบ: [{"name":"ของA","kind":"in","quantity":5,"unit":"กก."},{"name":"","kind":"in","quantity":0,"unit":"","note":"ของอีกตัวที่หมดไปเมื่อวาน"}]
@@ -268,6 +281,7 @@ func ParseStockCommandDrafts(raw string) ([]AIStockCommandDraft, error) {
 		draft.Note = strings.TrimSpace(draft.Note)
 		draft.Category = strings.ToLower(strings.TrimSpace(draft.Category))
 		draft.Date = strings.TrimSpace(draft.Date)
+		draft.Currency = strings.ToUpper(strings.TrimSpace(draft.Currency))
 		// A nameless entry is dropped, except when the model kept the owner's own
 		// words for it. That is the case where it could tell a command was there
 		// but not what it was about — "เพิ่มไข่ไก่ 30 ฟอง แล้วก็เพิ่มของอีกอย่างที่

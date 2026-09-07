@@ -116,6 +116,13 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 	questions := make([]string, 0, 2)
 	notices := make([]string, 0, 2)
 	for _, draft := range drafts {
+		// Money in another currency is a question, whatever else the command
+		// says: the ledger keeps baht, and converting quietly wrote "5000 ดอล"
+		// down as 5,000 baht.
+		if question := AIForeignCurrencyQuestion(draft); question != "" {
+			questions = append(questions, question)
+			continue
+		}
 		resolution := ResolveStockCommand(shelf, draft)
 		switch {
 		case AIMenuCommandKind(draft.Kind):

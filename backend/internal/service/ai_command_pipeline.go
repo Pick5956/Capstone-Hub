@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strconv"
 	"fmt"
 	"sort"
 	"strings"
@@ -38,6 +39,56 @@ type AIStockCommandDraft struct {
 	// Date is "YYYY-MM-DD" and defaults to today when the owner did not say one.
 	Category string `json:"category,omitempty"`
 	Date     string `json:"date,omitempty"`
+	// Currency is the ISO code the owner named when it was not baht ("USD"),
+	// on any command that carries money (expense, cost, menu_price). Empty
+	// means baht or unsaid. The ledger keeps baht only, so anything else is
+	// a question back, never a silent conversion: "5000 ดอล" once became a
+	// 5,000-baht expense.
+	Currency string `json:"currency,omitempty"`
+}
+
+// aiMoneyCommandKind reports whether a command's quantity is an amount of
+// money, which is where a foreign currency matters.
+func aiMoneyCommandKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "expense", "cost", "menu_price":
+		return true
+	default:
+		return false
+	}
+}
+
+// aiCurrencyNames are the currencies an owner is likely to name, in the words
+// the question back should use. Anything else is read back as its code.
+var aiCurrencyNames = map[string]string{
+	"USD": "ดอลลาร์สหรัฐ", "EUR": "ยูโร", "JPY": "เยน", "GBP": "ปอนด์", "CNY": "หยวน",
+	"KRW": "วอน", "SGD": "ดอลลาร์สิงคโปร์", "AUD": "ดอลลาร์ออสเตรเลีย", "MYR": "ริงกิต", "LAK": "กีบ",
+}
+
+// AIForeignCurrencyQuestion is the question back when a money command names a
+// currency other than baht. Empty when the command is in baht or carries no
+// money at all.
+func AIForeignCurrencyQuestion(draft AIStockCommandDraft) string {
+	currency := strings.ToUpper(strings.TrimSpace(draft.Currency))
+	if currency == "" || currency == "THB" || currency == "บาท" || !aiMoneyCommandKind(draft.Kind) {
+		return ""
+	}
+	name := aiCurrencyNames[currency]
+	if name == "" {
+		name = currency
+	}
+	title := strings.TrimSpace(draft.Name)
+	if title == "" {
+		title = strings.TrimSpace(draft.Note)
+	}
+	if title == "" {
+		title = "รายการนี้"
+	}
+	amount := strconv.FormatFloat(draft.Quantity, 'f', -1, 64)
+	if draft.Quantity <= 0 {
+		return fmt.Sprintf("ระบบบันทึกเป็นเงินบาทเท่านั้นครับ “%s” ที่บอกเป็น%s คิดเป็นกี่บาทครับ", title, name)
+	}
+	return fmt.Sprintf("ระบบบันทึกเป็นเงินบาทเท่านั้นครับ “%s” %s %s คิดเป็นกี่บาทครับ", title, amount, name)
 }
 
 // AICommandKindsAll lists what the extractor may propose.
