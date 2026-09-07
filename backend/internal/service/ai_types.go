@@ -163,6 +163,16 @@ type geminiGenerateResponse struct {
 	Candidates []struct {
 		Content geminiContent `json:"content"`
 	} `json:"candidates"`
+	// UsageMetadata is what the call cost. cachedContentTokenCount is the part
+	// of the prompt Gemini served from its implicit cache — the number that says
+	// whether the static prefix (persona, rules, catalogue) is being cached.
+	UsageMetadata struct {
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
+		TotalTokenCount         int `json:"totalTokenCount"`
+	} `json:"usageMetadata"`
 }
 
 type groqMessage struct {

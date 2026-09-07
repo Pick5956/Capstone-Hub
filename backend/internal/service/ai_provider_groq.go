@@ -491,6 +491,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts ai
 		model = "openai/gpt-oss-20b"
 	}
 	aiStage("call", "Groq second-round model=%s", model)
+	started := time.Now()
 	payload := groqRequest{
 		Model: model,
 		Messages: []groqMessage{
@@ -533,8 +534,8 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts ai
 			aiStage("warn", "Groq second-round hit the output ceiling → the answer is cut off (completion_tokens=%d reasoning_tokens=%d)",
 				parsed.Usage.CompletionTokens, parsed.Usage.CompletionTokensDetails.ReasoningTokens)
 		} else {
-			aiStage("usage", "Groq second-round finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d cached_tokens=%d",
-				choice.FinishReason, parsed.Usage.CompletionTokens,
+			aiStage("usage", "Groq second-round took=%dms finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d cached_tokens=%d",
+				time.Since(started).Milliseconds(), choice.FinishReason, parsed.Usage.CompletionTokens,
 				parsed.Usage.CompletionTokensDetails.ReasoningTokens, parsed.Usage.PromptTokens,
 				parsed.Usage.PromptTokensDetails.CachedTokens)
 		}

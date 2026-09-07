@@ -422,6 +422,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string, overr
 		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini second-round model=%s", model)
+	started := time.Now()
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -452,6 +453,13 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string, overr
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return "", "", err
 	}
+	// Counts and the wall time, no content, so it is safe outside AI_DEBUG. This
+	// is how a call's cost is read: prompt size, how much of it the cache served,
+	// how long thinking took against writing.
+	usage := parsed.UsageMetadata
+	aiStage("usage", "Gemini second-round took=%dms prompt_tokens=%d cached_tokens=%d thoughts_tokens=%d output_tokens=%d",
+		time.Since(started).Milliseconds(), usage.PromptTokenCount, usage.CachedContentTokenCount,
+		usage.ThoughtsTokenCount, usage.CandidatesTokenCount)
 	for _, candidate := range parsed.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if text := strings.TrimSpace(part.Text); text != "" {
