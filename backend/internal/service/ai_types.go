@@ -25,6 +25,9 @@ type AIAskRequest struct {
 	Question       string                  `json:"question" binding:"required"`
 	History        []AIConversationMessage `json:"history"`
 	ConversationID string                  `json:"conversation_id,omitempty" binding:"omitempty,max=64"`
+	// OnDraft is set by a caller that wants the answer as it is written (the
+	// SSE route). Server-side only; nil means answer when done.
+	OnDraft func(text string) `json:"-"`
 }
 
 type AIConversationMessage struct {
@@ -217,6 +220,25 @@ type groqRequest struct {
 	// to "medium", which is what every call here ran at before this field
 	// existed, without anyone choosing it.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// Stream asks for the reply as server-sent events; StreamOptions asks for
+	// the usage block in the last one. Both omitted on the plain call.
+	Stream        bool               `json:"stream,omitempty"`
+	StreamOptions *groqStreamOptions `json:"stream_options,omitempty"`
+}
+
+type groqStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
+}
+
+// groqStreamChunk is one server-sent event of a streamed Groq reply.
+type groqStreamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *groqUsage `json:"usage"`
 }
 
 // zeroTemperature returns a pointer to 0 for deterministic calls (the intent

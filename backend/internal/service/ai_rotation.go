@@ -16,6 +16,15 @@ func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, e
 // keep the shorter call and stay literally unchanged: the zero options they
 // would have had to pass are supplied above instead.
 func (s *AIService) askSecondRoundWithOptions(prompt string, opts aiProviderCompleteOptions) (string, string, error) {
+	return s.askAcrossProviders(func(adapter aiProviderAdapter) (aiProviderAnswer, error) {
+		return adapter.Complete(prompt, opts)
+	})
+}
+
+// askAcrossProviders runs one completion through the configured providers in
+// order, with the park-on-overload and fall-through rules, calling `call` on
+// each adapter that is usable. The plain and the streamed call share it.
+func (s *AIService) askAcrossProviders(call func(adapter aiProviderAdapter) (aiProviderAnswer, error)) (string, string, error) {
 	var lastErr error
 	provider := s.getAIProvider()
 	adapters := s.orderedProviderAdapters()
@@ -38,7 +47,7 @@ func (s *AIService) askSecondRoundWithOptions(prompt string, opts aiProviderComp
 			}
 			continue
 		}
-		answer, err := adapter.Complete(prompt, opts)
+		answer, err := call(adapter)
 		if err == nil {
 			s.keyHealth.clear(adapter.ID(), providerWideKeyIndex)
 			return answer.Text, answer.Model, nil

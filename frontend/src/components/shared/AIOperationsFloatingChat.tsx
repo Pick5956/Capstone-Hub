@@ -23,7 +23,8 @@ const ORB_DRAG_THRESHOLD = 6;
 const ORB_SPOT_KEY = "ai_orb_spot";
 type OrbSpot = { side: "left" | "right"; top: number };
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAIStream } from "@/src/lib/aiStream";
+import { cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -273,6 +274,9 @@ export default function AIOperationsFloatingChat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // The answer so far while it is being written — shown in place of the
+  // "thinking" line, replaced by the finished message when it arrives.
+  const [draft, setDraft] = useState<string | null>(null);
   const [outage, setOutage] = useState<AIOutage | null>(null);
   const [lastQuestion, setLastQuestion] = useState("");
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
@@ -407,7 +411,7 @@ export default function AIOperationsFloatingChat() {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "end" });
     }
-  }, [messages, loading]);
+  }, [messages, loading, draft]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -575,7 +579,11 @@ export default function AIOperationsFloatingChat() {
     setLoading(true);
 
     try {
-      const response = await askOperationsAI(trimmed, conversationHistory(), conversationId);
+      const response = await askOperationsAIStream(trimmed, conversationHistory(), conversationId, {
+        onDraft: (text) => {
+          if (conversationRequests.isCurrent(requestGeneration)) setDraft(text);
+        },
+      });
       // The chat was cleared or switched restaurants while this was in flight —
       // drop the answer instead of appending it to a conversation it never joined.
       if (!conversationRequests.isCurrent(requestGeneration)) return;
@@ -655,7 +663,8 @@ export default function AIOperationsFloatingChat() {
         },
       ]);
     } finally {
-      if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setDraft(null);
+      setLoading(false);
     }
   };
 
@@ -997,7 +1006,19 @@ export default function AIOperationsFloatingChat() {
             })
             )}
 
-            {loading && (
+            {loading && draft && (
+              <div className="flex max-w-full items-start gap-2.5 sm:max-w-[90%]">
+                <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
+                <div
+                  className="min-w-0 break-words rounded-2xl rounded-tl-md border border-gray-200/70 bg-white px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]"
+                  aria-live="polite"
+                >
+                  <SafeAIResponseContent content={draft} compact language={language} />
+                  <span className="ai-stream-caret" aria-hidden="true" />
+                </div>
+              </div>
+            )}
+            {loading && !draft && (
               <div className="flex items-center gap-2.5 animate-message-slide">
                 <SiriOrb size="30px" className="shrink-0" animationDuration={8} />
                 <div

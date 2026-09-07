@@ -1536,6 +1536,23 @@ textarea {
 .ai-chatlist-panel-in .ai-chatlist-card { animation: ai-chatlist-card-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .ai-chatlist-panel-out { pointer-events: none; }
 .ai-chatlist-panel-out .ai-chatlist-card { animation: ai-chatlist-card-out 0.18s ease-in both; }
+/* The caret at the end of an answer still being written. */
+.ai-stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: #f97316;
+  border-radius: 1px;
+  animation: ai-stream-caret 0.9s steps(2, start) infinite;
+}
+@keyframes ai-stream-caret {
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-stream-caret { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .ai-chatlist-sheet-in, .ai-chatlist-sheet-out, .ai-chatlist-fade, .ai-chatlist-pop,
   .ai-chatlist-panel-in .ai-chatlist-card, .ai-chatlist-panel-out .ai-chatlist-card { animation: none; }

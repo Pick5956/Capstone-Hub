@@ -57,6 +57,16 @@ type Chat interface {
 	Complete(ctx context.Context, prompt string, kind CallKind) (string, error)
 }
 
+// StreamingChat is a Chat that can also hand the reply over as it is written.
+// onDelta receives each new piece of text in order; the return value is still
+// the whole reply, so a caller can treat the two exactly alike. A Chat that
+// does not implement this is used through Complete and the owner simply sees
+// the answer when it is done.
+type StreamingChat interface {
+	Chat
+	CompleteStream(ctx context.Context, prompt string, kind CallKind, onDelta func(text string)) (string, error)
+}
+
 // ToolResult is what one tool produced, already rendered as text by the code
 // that owns the calculation. Label says where it came from and what period it
 // covers; it is printed above the body in the fact sheet so the model can never
@@ -125,6 +135,12 @@ type Request struct {
 	// "สัปดาห์ก่อนคือวันที่เท่าไหร่" it hedged with "จากข้อมูลล่าสุด" over a
 	// question that has one plain answer.
 	Today string
+	// OnDraft, when set, is called with the answer so far — already cleaned
+	// for the screen and never including the follow-up block — each time the
+	// writer produces more of it. The final Answer.Text is still the checked,
+	// finished text; a screen shows the drafts while it waits and then puts
+	// the final text in their place. Nil means nobody is watching.
+	OnDraft func(text string)
 }
 
 // Answer is what the owner reads, plus the tools that produced it, which the

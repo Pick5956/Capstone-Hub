@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
+	"log"
+	"sync"
 
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
@@ -98,84 +99,113 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	result, err := ctrl.svc.AskOperationsForOwner(c.Request.Context(), service.AIActorContext{
-		RestaurantID: restaurantID,
-		OwnerUserID:  userID,
-		Role:         "owner",
-	}, &req)
-	if err != nil {
-		// An outage is reported as an outage. The assistant can still read the
-		// database without a provider, and answering from it anyway would hide the
-		// failure behind something that looks like an ordinary answer: the owner
-		// could not tell the two apart, nor know the day's budget was gone. 429
-		// says come back later and when; 503 says the provider is out, not the
-		// budget.
-		if errors.Is(err, service.ErrAIQuotaExceeded) {
-			respondAIOutage(c, http.StatusTooManyRequests, "ai_quota_exceeded", err)
-			return
-		}
-		if errors.Is(err, service.ErrAIProviderUnavailable) {
-			respondAIOutage(c, http.StatusServiceUnavailable, "ai_provider_unavailable", err)
-			return
-		}
-		if errors.Is(err, repository.ErrAIConversationConflict) {
-			respondAPIError(c, http.StatusConflict, err)
-			return
-		}
-		// A chat that was trashed or purged under the screen: its own code, so
-		// the screen opens a fresh chat instead of showing a failure.
-		if errors.Is(err, service.ErrAIConversationGone) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "conversation is gone", "code": "conversation_gone"})
-			return
-		}
-		if errors.Is(err, service.ErrAIConversationPersistence) {
-			respondAPIError(c, http.StatusInternalServerError, err)
-			return
-		}
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
+	actor := service.AIActorContext{RestaurantID: restaurantID, OwnerUserID: userID, Role: "owner"}
 	// Ask responses can contain a one-time action confirmation token and always
 	// contain private restaurant data. Do not let browsers or intermediary
-	// caches retain either the JSON response or SSE metadata.
+	// caches retain either the JSON response or the event stream.
 	c.Header("Cache-Control", "no-store, private")
 	c.Header("Pragma", "no-cache")
 
-	isStream := c.Query("stream") == "true"
-	if isStream {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Connection", "keep-alive")
-		c.Header("Transfer-Encoding", "chunked")
-
-		c.Stream(func(w io.Writer) bool {
-			// Stream audited Thai text smoothly (chunking runes for fluid typography)
-			runes := []rune(result.Answer)
-			chunkSize := 3
-			for i := 0; i < len(runes); i += chunkSize {
-				end := i + chunkSize
-				if end > len(runes) {
-					end = len(runes)
-				}
-				chunk := string(runes[i:end])
-				c.SSEvent("token", chunk)
-				c.Writer.Flush()
-				time.Sleep(15 * time.Millisecond)
-			}
-
-			// Stream final structural metadata
-			metaJSON, _ := json.Marshal(result)
-			c.SSEvent("metadata", string(metaJSON))
-			c.Writer.Flush()
-
-			// Signal end of stream
-			c.SSEvent("end", "done")
-			c.Writer.Flush()
-			return false
-		})
+	if c.Query("stream") == "true" {
+		ctrl.askStreaming(c, actor, &req)
 		return
 	}
-
+	result, err := ctrl.svc.AskOperationsForOwner(c.Request.Context(), actor, &req)
+	if err != nil {
+		status, body := askErrorResponse(c, err)
+		c.JSON(status, body)
+		return
+	}
 	c.JSON(http.StatusOK, result)
+}
+
+// askStreaming answers over server-sent events so the owner reads the answer
+// while it is being written. Three event kinds, in this order:
+//
+//	draft  {"text": "..."}   the answer so far, cleaned, sent as it grows
+//	answer {AIAskResponse}   the finished response, replacing every draft
+//	error  {"error","code"}  what a plain call would have returned, plus
+//	                         "status" with the HTTP status it would have carried
+//
+// The stream is 200 from the first byte, so the outcome rides in the last
+// event. Drafts come from the model's goroutine; the one writer lock keeps
+// events whole.
+func (ctrl *AIController) askStreaming(c *gin.Context, actor service.AIActorContext, req *service.AIAskRequest) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	var mu sync.Mutex
+	send := func(event string, payload any) {
+		mu.Lock()
+		defer mu.Unlock()
+		c.SSEvent(event, payload)
+		c.Writer.Flush()
+	}
+	req.OnDraft = func(text string) { send("draft", gin.H{"text": text}) }
+	result, err := ctrl.svc.AskOperationsForOwner(c.Request.Context(), actor, req)
+	if err != nil {
+		status, body := askErrorResponse(c, err)
+		body["status"] = status
+		send("error", body)
+		return
+	}
+	send("answer", result)
+}
+
+// askErrorResponse is the one mapping from an ask failure to what the client
+// sees, shared by the JSON and the streamed route. An outage is reported as
+// an outage: the assistant can still read the database without a provider,
+// and answering from it anyway would hide the failure behind something that
+// looks like an ordinary answer — the owner could not tell the two apart, nor
+// know the day's budget was gone. 429 says come back later and when; 503 says
+// the provider is out, not the budget.
+func askErrorResponse(c *gin.Context, err error) (int, gin.H) {
+	if errors.Is(err, service.ErrAIQuotaExceeded) {
+		return http.StatusTooManyRequests, aiOutageBody(c, "ai_quota_exceeded", err)
+	}
+	if errors.Is(err, service.ErrAIProviderUnavailable) {
+		return http.StatusServiceUnavailable, aiOutageBody(c, "ai_provider_unavailable", err)
+	}
+	if errors.Is(err, repository.ErrAIConversationConflict) {
+		return publicErrorBody(c, http.StatusConflict, err)
+	}
+	// A chat that was trashed or purged under the screen: its own code, so the
+	// screen opens a fresh chat instead of showing a failure.
+	if errors.Is(err, service.ErrAIConversationGone) {
+		return http.StatusNotFound, gin.H{"error": "conversation is gone", "code": "conversation_gone"}
+	}
+	if errors.Is(err, service.ErrAIConversationPersistence) {
+		return publicErrorBody(c, http.StatusInternalServerError, err)
+	}
+	return publicErrorBody(c, http.StatusBadRequest, err)
+}
+
+// publicErrorBody is respondAPIError's body without the write, for callers
+// that send it themselves.
+func publicErrorBody(c *gin.Context, status int, err error) (int, gin.H) {
+	publicStatus, message, code := publicAPIError(status, err)
+	if publicStatus >= http.StatusInternalServerError {
+		route := c.FullPath()
+		if route == "" {
+			route = "<unmatched>"
+		}
+		log.Printf("request_error route=%s status=%d error_type=%T", route, publicStatus, err)
+	}
+	return publicStatus, gin.H{"error": message, "code": code}
+}
+
+// aiOutageBody is respondAIOutage's body; the Retry-After header goes with it
+// on the JSON route only, where headers can still be set.
+func aiOutageBody(c *gin.Context, code string, err error) gin.H {
+	body := gin.H{"error": err.Error(), "code": code}
+	if seconds := service.AIRetryAfterSeconds(err); seconds > 0 {
+		body["retry_after_seconds"] = seconds
+		if !c.Writer.Written() {
+			c.Header("Retry-After", strconv.Itoa(seconds))
+		}
+	}
+	return body
 }
 
 func (ctrl *AIController) ProactiveInsights(c *gin.Context) {

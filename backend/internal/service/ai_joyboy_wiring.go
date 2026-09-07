@@ -38,6 +38,16 @@ func (c joyboyChat) Complete(ctx context.Context, prompt string, kind joyboy.Cal
 	return text, err
 }
 
+// CompleteStream is Complete with the reply handed over as it is written —
+// what lets the owner read the answer while the model is still on it.
+func (c joyboyChat) CompleteStream(ctx context.Context, prompt string, kind joyboy.CallKind, onDelta func(string)) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	text, _, err := c.service.askSecondRoundStream(prompt, joyboyCompleteOptions(kind), onDelta)
+	return text, err
+}
+
 // joyboyWriteCeiling is the output ceiling for the answer-writing round. Groq's
 // unset default is 2,048, and at medium effort the round's worst measured cost
 // was 1,917 tokens thinking plus 326 writing — 2,243, which overruns the default
@@ -949,6 +959,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		Digest:     request.Digest,
 		OwnerTitle: s.preferencesFor(actor.RestaurantID).OwnerTitle,
 		Today:      joyboyTodayContext(repository.BangkokNow()),
+		OnDraft:    request.OnDraft,
 	}
 	var answer joyboy.Answer
 	if draftsCh == nil {

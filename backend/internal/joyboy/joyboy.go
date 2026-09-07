@@ -66,7 +66,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	sheet := buildFactSheet(results)
-	text, followUps, err := a.write(ctx, question, request.History, todayLine(request.Today)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet)
+	text, followUps, err := a.write(ctx, question, request.History, todayLine(request.Today)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet, request.OnDraft)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -104,8 +104,8 @@ func answeredTools(results []ToolResult) []string {
 // owner still read the invented number. Naming the figure back to the model gets
 // a clean answer, and it fires rarely enough — once in about twenty-five
 // questions here — to be worth the extra call when it does.
-func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string) (string, []string, error) {
-	text, followUps, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet)
+func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string, onDraft func(string)) (string, []string, error) {
+	text, followUps, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet, onDraft)
 	if err != nil {
 		return text, nil, err
 	}
@@ -136,10 +136,10 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 // that arrived empty or as nothing but a wrapper, which a model does
 // occasionally and does not repeat; anything worse than that is an outage and is
 // reported as one.
-func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string) (string, []string, []string, error) {
+func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string, onDraft func(string)) (string, []string, []string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 2; attempt++ {
-		raw, err := a.chat.Complete(ctx, prompt, CallWriteAnswer)
+		raw, err := a.completeAnswer(ctx, prompt, onDraft)
 		if err != nil {
 			lastErr = err
 			a.log("joyboy: writing the answer failed on attempt %d: %v", attempt, err)
@@ -159,6 +159,38 @@ func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string) (string
 		a.log("joyboy: attempt %d produced nothing usable", attempt)
 	}
 	return "", nil, nil, fmt.Errorf("%w: writing the answer: %w", ErrUnavailable, lastErr)
+}
+
+// completeAnswer is the write call, streamed to onDraft when both sides can:
+// the chat streams and someone is watching. Each delta is folded into the raw
+// reply so far and the owner is shown draftView of it — what they would read
+// if the model stopped right there — never the raw text, never the marker.
+func (a *Assistant) completeAnswer(ctx context.Context, prompt string, onDraft func(string)) (string, error) {
+	streamer, ok := a.chat.(StreamingChat)
+	if !ok || onDraft == nil {
+		return a.chat.Complete(ctx, prompt, CallWriteAnswer)
+	}
+	var raw strings.Builder
+	last := ""
+	return streamer.CompleteStream(ctx, prompt, CallWriteAnswer, func(delta string) {
+		raw.WriteString(delta)
+		if view := draftView(raw.String()); view != "" && view != last {
+			last = view
+			onDraft(view)
+		}
+	})
+}
+
+// draftView is the readable part of a reply still being written: everything
+// before the follow-up block, minus a marker that has only started to arrive
+// ("==", "===ถาม"), cleaned the way the finished answer is.
+func draftView(raw string) string {
+	view := raw
+	if at := strings.Index(view, "==="); at >= 0 {
+		view = view[:at]
+	}
+	view = strings.TrimRight(view, "=")
+	return cleanAnswer(view)
 }
 
 func dedupe(names []string) []string {
