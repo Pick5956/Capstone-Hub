@@ -126,6 +126,10 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// conversation tables, which live outside the frozen registry (created
 		// by migration 8's own AutoMigrate), so the fingerprint is unchanged.
 		23: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
+		// Version 24 widens the action-type CHECK once more (creating a menu
+		// item), on the plan table that migration 16 owns outside the frozen
+		// registry, so the fingerprint is unchanged.
+		24: "ef33ae90b3371c6091807765f0c1e1bf9db93df2790fb7ca0b58e373ad2abd80",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

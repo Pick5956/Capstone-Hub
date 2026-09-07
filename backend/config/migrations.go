@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 23
+	CurrentSchemaVersion int64 = 24
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -446,6 +446,26 @@ func schemaMigrationPlan() []SchemaMigration {
 					if err := ctx.DB.Exec(statement).Error; err != nil {
 						return fmt.Errorf("add AI conversation threads: %w", err)
 					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 24,
+			Name:    "ai_action_create_menu_item",
+			Up: func(ctx *MigrationContext) error {
+				// Adds creating a menu item to the reviewed action allowlist. Same
+				// additive shape as 17, 18 and 19: the constraint only widens.
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items DROP CONSTRAINT IF EXISTS ai_action_plan_items_allowed_type`,
+				).Error; err != nil {
+					return fmt.Errorf("drop AI action type constraint: %w", err)
+				}
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
+						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability','create_expense','set_menu_price','create_menu_item'))`,
+				).Error; err != nil {
+					return fmt.Errorf("recreate AI action type constraint: %w", err)
 				}
 				return nil
 			},

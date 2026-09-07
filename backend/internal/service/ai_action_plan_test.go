@@ -253,6 +253,8 @@ func TestAllowedAIActionTypes(t *testing.T) {
 		// Recording an expense and repricing a menu joined in migration 19.
 		entity.AIActionTypeCreateExpense,
 		entity.AIActionTypeSetMenuPrice,
+		// Creating a menu item joined in migration 24.
+		entity.AIActionTypeCreateMenuItem,
 	} {
 		if !entity.IsAllowedAIActionType(good) {
 			t.Errorf("%q should be allowed", good)

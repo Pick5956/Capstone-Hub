@@ -72,6 +72,16 @@ type AIActionPorts struct {
 	Expenses    AIActionExpensePort
 }
 
+// AIActionMenuCreator is what creating a menu item needs on top of
+// AIActionMenuPort: the categories to file it under and the same Create the
+// menu screen calls. It is a separate, optional interface so the existing
+// fakes and any narrower port keep compiling; a Menus port that cannot
+// create simply cannot, and the command is refused with a reason.
+type AIActionMenuCreator interface {
+	ListCategories(restaurantID uint, includeInactive bool) ([]entity.Category, error)
+	CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*entity.MenuItem, error)
+}
+
 // AIActionExpensePort is the slice of the expense ledger the action layer needs.
 // Only Create is here: editing or deleting a past entry means finding which one,
 // which is a conversation of its own and not part of this boundary yet.
@@ -112,6 +122,10 @@ type AIAdjustStockCommand struct {
 	// Set only for kind=expense.
 	Category string
 	Date     string
+	// Set only for kind=menu_create: the category the new menu goes in, already
+	// resolved to a row of this restaurant, and its name for the preview.
+	CategoryID   uint
+	CategoryName string
 }
 
 // AIActionItemPayload is what gets persisted for an item. It is deliberately
@@ -135,6 +149,8 @@ type AIActionItemPayload struct {
 	// Used by create_expense.
 	Category string `json:"category,omitempty"`
 	Date     string `json:"date,omitempty"`
+	// Used by create_menu_item.
+	CategoryID uint `json:"category_id,omitempty"`
 
 	// What the row held when the preview was written, for the action types that
 	// overwrite a value outright. The owner confirms "5000 → 3000" having read
@@ -417,6 +433,48 @@ func validateCreateExpense(command AIAdjustStockCommand) (AIActionItemPayload, A
 // says what the change does to the money per plate. The owner is deciding
 // whether to raise a price; "139 → 159" alone does not tell them whether that
 // covers the cost, and the cost is already known.
+// validateCreateMenuItem checks a new menu against the live catalogue: a name
+// nobody has yet, a price in range, a category of this restaurant. The row is
+// created open for sale with no recipe or picture — that is said on the card.
+func validateCreateMenuItem(port AIActionMenuPort, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, error) {
+	if port == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnavailable
+	}
+	if _, ok := port.(AIActionMenuCreator); !ok {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnavailable
+	}
+	name := strings.TrimSpace(command.Name)
+	if name == "" {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("ต้องมีชื่อเมนู")
+	}
+	if command.Quantity <= 0 || command.Quantity > aiActionMaxQuantity {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionBadQuantity
+	}
+	if command.CategoryID == 0 {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("ต้องเลือกหมวดเมนู")
+	}
+	menus, err := port.ListMenuItems(restaurantID, true, 0)
+	if err != nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, err
+	}
+	if match := ResolveMenuName(menus, name); match.Exact != nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, fmt.Errorf("มีเมนู “%s” อยู่แล้ว", match.Exact.Name)
+	}
+	price := roundBaht(command.Quantity)
+	category := strings.TrimSpace(command.CategoryName)
+	if category == "" {
+		category = fmt.Sprintf("หมวด #%d", command.CategoryID)
+	}
+	preview := AIActionItemPreview{
+		Title:  name,
+		Change: fmt.Sprintf("เพิ่มเมนูใหม่ ราคา %s บาท · หมวด%s", formatStockNumber(price), category),
+		SideEffects: []string{
+			"เปิดขายทันที ยังไม่มีสูตร รูป และตัวเลือก — เติมได้ที่หน้าจัดการเมนู",
+		},
+	}
+	return AIActionItemPayload{Name: name, Amount: price, CategoryID: command.CategoryID}, preview, nil
+}
+
 func validateSetMenuPrice(port AIActionMenuPort, restaurantID, menuItemID uint, price float64) (AIActionItemPayload, AIActionItemPreview, error) {
 	if port == nil {
 		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnavailable
@@ -497,6 +555,9 @@ func aiValidateCommand(ports AIActionPorts, restaurantID uint, command AIAdjustS
 	case "menu_price":
 		payload, preview, err := validateSetMenuPrice(ports.Menus, restaurantID, command.MenuItemID, command.Quantity)
 		return payload, preview, entity.AIActionTypeSetMenuPrice, err
+	case "menu_create":
+		payload, preview, err := validateCreateMenuItem(ports.Menus, restaurantID, command)
+		return payload, preview, entity.AIActionTypeCreateMenuItem, err
 	case "min":
 		payload, preview, err := validateSetIngredientField(ports.Ingredients, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientMinStock, command.Quantity)
 		return payload, preview, entity.AIActionTypeSetIngredientMinStock, err
@@ -593,6 +654,33 @@ func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, it
 			}
 		}
 		_, err := ports.Menus.UpdateMenuItemPrice(restaurantID, payload.MenuItemID, payload.Amount)
+		return err
+
+	case entity.AIActionTypeCreateMenuItem:
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		creator, ok := ports.Menus.(AIActionMenuCreator)
+		if ports.Menus == nil || !ok {
+			return ErrAIActionUnavailable
+		}
+		// Re-checked at the button: a colleague may have added the same dish
+		// while the card sat on screen.
+		menus, err := ports.Menus.ListMenuItems(restaurantID, true, 0)
+		if err != nil {
+			return err
+		}
+		if match := ResolveMenuName(menus, payload.Name); match.Exact != nil {
+			return fmt.Errorf("มีเมนู “%s” อยู่แล้ว", match.Exact.Name)
+		}
+		// The same Create the menu form calls, so its validation and its
+		// category check happen here too.
+		_, err = creator.CreateMenuItem(restaurantID, &MenuItemRequest{
+			Name:       payload.Name,
+			Price:      payload.Amount,
+			CategoryID: payload.CategoryID,
+		})
 		return err
 
 	case entity.AIActionTypeSetMenuAvailability:

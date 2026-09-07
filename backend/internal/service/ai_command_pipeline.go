@@ -92,7 +92,7 @@ func AIForeignCurrencyQuestion(draft AIStockCommandDraft) string {
 }
 
 // AICommandKindsAll lists what the extractor may propose.
-var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off", "expense"}
+var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off", "menu_price", "menu_create", "expense"}
 
 // AIMenuCommandKind reports whether a drafted command is about a menu rather
 // than the shelf, which decides which catalogue the name is resolved against.
@@ -102,6 +102,84 @@ func AIMenuCommandKind(kind string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// AIMenuCreateKind reports a command that adds a menu item — resolved against
+// the catalogue like the menu kinds (the name must be new), but also against
+// the categories.
+func AIMenuCreateKind(kind string) bool {
+	return strings.ToLower(strings.TrimSpace(kind)) == "menu_create"
+}
+
+// ResolveMenuCreateCommand turns "เพิ่มเมนูข้าวผัดปู ราคา 120 หมวดข้าว" into a
+// ready command, or into the one question that is missing: the name, the
+// price, or which of the restaurant's categories it goes in. A name the
+// catalogue already has is nothing to do — the owner is told, not asked.
+func ResolveMenuCreateCommand(menus []entity.MenuItem, categories []entity.Category, draft AIStockCommandDraft) AICommandResolution {
+	title := strings.TrimSpace(draft.Name)
+	if title == "" {
+		if said := strings.TrimSpace(draft.Note); said != "" {
+			return AICommandResolution{Kind: AICommandOutcomeAsk, Question: fmt.Sprintf("ส่วน “%s” จะเพิ่มเมนูชื่ออะไรครับ", said)}
+		}
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Question: "จะเพิ่มเมนูชื่ออะไรครับ"}
+	}
+	if match := ResolveMenuName(menus, title); match.Exact != nil {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeNothingToDo,
+			Title:    match.Exact.Name,
+			Question: fmt.Sprintf("มีเมนู “%s” อยู่แล้วครับ ราคา %s บาท ถ้าจะแก้ราคาหรือเปิด-ปิดขาย บอกได้เลย", match.Exact.Name, formatStockNumber(match.Exact.Price)),
+		}
+	}
+	if draft.Quantity < 0 {
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: fmt.Sprintf("“%s” ตั้งราคาติดลบไม่ได้ครับ จะขายเท่าไหร่ครับ", title)}
+	}
+	if draft.Quantity == 0 {
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: fmt.Sprintf("“%s” ขายราคาเท่าไหร่ครับ", title)}
+	}
+	active := make([]entity.Category, 0, len(categories))
+	for _, category := range categories {
+		if category.IsActive {
+			active = append(active, category)
+		}
+	}
+	if len(active) == 0 {
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: "ร้านยังไม่มีหมวดเมนูเลยครับ สร้างหมวดที่หน้าจัดการเมนูก่อน แล้วค่อยสั่งเพิ่มเมนูใหม่อีกที"}
+	}
+	names := make([]string, len(active))
+	for index, category := range active {
+		names[index] = category.Name
+	}
+	chosen := -1
+	if wanted := strings.TrimSpace(draft.Category); wanted != "" {
+		exact, candidates := aiMatchNames(names, wanted)
+		switch {
+		case exact >= 0:
+			chosen = exact
+		case len(candidates) == 1:
+			chosen = candidates[0]
+		}
+	} else if len(active) == 1 {
+		// One category is not a choice.
+		chosen = 0
+	}
+	if chosen < 0 {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” จัดอยู่หมวดไหนครับ — %s", title, strings.Join(names, " / ")),
+		}
+	}
+	return AICommandResolution{
+		Kind:  AICommandOutcomeReady,
+		Title: title,
+		Command: AIAdjustStockCommand{
+			Kind:         "menu_create",
+			Name:         title,
+			Quantity:     draft.Quantity,
+			CategoryID:   active[chosen].ID,
+			CategoryName: active[chosen].Name,
+		},
 	}
 }
 

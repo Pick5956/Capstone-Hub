@@ -107,11 +107,12 @@ export const getOperationsSnapshot = () =>
 export const getProactiveInsights = () =>
   apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");
 
-// The seven kinds of change the assistant can prepare, in the order the
+// The eight kinds of change the assistant can prepare, in the order the
 // settings screen lists them. Keys match entity.AIActionType* on the backend.
 export const AI_ACTION_TYPES = [
   "set_menu_availability",
   "set_menu_price",
+  "create_menu_item",
   "adjust_ingredient_stock",
   "set_ingredient_min_stock",
   "set_ingredient_cost",

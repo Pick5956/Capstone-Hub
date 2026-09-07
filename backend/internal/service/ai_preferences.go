@@ -44,6 +44,7 @@ type AIPreferenceStore interface {
 var aiSettableActionTypes = []string{
 	entity.AIActionTypeSetMenuAvailability,
 	entity.AIActionTypeSetMenuPrice,
+	entity.AIActionTypeCreateMenuItem,
 	entity.AIActionTypeAdjustIngredientStock,
 	entity.AIActionTypeSetIngredientMinStock,
 	entity.AIActionTypeSetIngredientCost,
@@ -142,6 +143,8 @@ func aiActionTypeThai(actionType string) string {
 		return "เปิด–ปิดขายเมนู"
 	case entity.AIActionTypeSetMenuPrice:
 		return "เปลี่ยนราคาเมนู"
+	case entity.AIActionTypeCreateMenuItem:
+		return "เพิ่มเมนูใหม่"
 	case entity.AIActionTypeAdjustIngredientStock:
 		return "ปรับจำนวนสต๊อก"
 	case entity.AIActionTypeSetIngredientMinStock:

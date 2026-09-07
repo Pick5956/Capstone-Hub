@@ -109,6 +109,24 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 			return false, ""
 		}
 	}
+	// The categories, only when a new menu is being added — the one command
+	// that has to file the row somewhere.
+	var categories []entity.Category
+	if aiDraftsIncludeMenuCreate(drafts) {
+		creator, ok := s.actionMenus.(AIActionMenuCreator)
+		if !ok {
+			response.Answer = "ผมยังเพิ่มเมนูใหม่ให้ไม่ได้ครับ"
+			response.Intent = AIIntentChat
+			response.Task = AITaskGeneralChat
+			response.Model = "joyboy-command-unavailable"
+			return true, ""
+		}
+		categories, err = creator.ListCategories(actor.RestaurantID, false)
+		if err != nil {
+			aiStage("warn", "joyboy command: listing categories failed (%v) → answering normally", err)
+			return false, ""
+		}
+	}
 
 	commands := make([]AIAdjustStockCommand, 0, len(drafts))
 	titles := make([]string, 0, len(drafts))
@@ -125,6 +143,8 @@ func (s *AIService) handleJoyboyStockDrafts(actor AIActorContext, request *AIAsk
 		}
 		resolution := ResolveStockCommand(shelf, draft)
 		switch {
+		case AIMenuCreateKind(draft.Kind):
+			resolution = ResolveMenuCreateCommand(menus, categories, draft)
 		case AIMenuCommandKind(draft.Kind):
 			resolution = ResolveMenuCommand(menus, draft)
 		case strings.EqualFold(strings.TrimSpace(draft.Kind), "expense"):
@@ -366,7 +386,16 @@ func (s *AIService) actionPorts() AIActionPorts {
 // which is what decides whether the menu catalogue is worth fetching.
 func aiDraftsIncludeMenu(drafts []AIStockCommandDraft) bool {
 	for _, draft := range drafts {
-		if AIMenuCommandKind(draft.Kind) {
+		if AIMenuCommandKind(draft.Kind) || AIMenuCreateKind(draft.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func aiDraftsIncludeMenuCreate(drafts []AIStockCommandDraft) bool {
+	for _, draft := range drafts {
+		if AIMenuCreateKind(draft.Kind) {
 			return true
 		}
 	}
@@ -399,6 +428,8 @@ func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, preview
 				verb = "บันทึกรายจ่าย"
 			case entity.AIActionTypeSetMenuPrice:
 				verb = "ตั้งราคาเมนู"
+			case entity.AIActionTypeCreateMenuItem:
+				verb = "เพิ่มเมนู"
 			}
 		}
 	}
