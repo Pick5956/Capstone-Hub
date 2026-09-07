@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Send,
+  ArrowUp,
   X,
   SquarePen,
   MessageSquareText,
@@ -977,7 +977,7 @@ export default function AIOperationsFloatingChat() {
                 <React.Fragment key={msg.id}>
                 <div className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
-                  <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
+                  <div className="min-w-0 break-words rounded-2xl rounded-tl-md border border-gray-200/70 bg-white px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                   </div>
                 </div>
@@ -1003,7 +1003,7 @@ export default function AIOperationsFloatingChat() {
                 <div
                   role="status"
                   aria-label={copy.thinking}
-                  className="flex items-center rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 dark:bg-gray-800/80"
+                  className="flex items-center rounded-2xl rounded-tl-md border border-gray-200/70 bg-white px-4 py-2.5 dark:border-gray-700/60 dark:bg-gray-800/80"
                 >
                   <span className="ai-shimmer-text text-xs font-medium sm:text-[13px]">{copy.thinking}</span>
                 </div>
@@ -1121,7 +1121,7 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling || !input.trim()}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send className="h-4 w-4" />
+                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.75} />
               </button>
               </div>
             </div>
