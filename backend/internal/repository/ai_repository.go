@@ -171,6 +171,71 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 	return rows, err
 }
 
+// AIMonthlyProfit is one calendar month of the shop's money: paid sales, the
+// recipe cost of what was sold, and the expenses the owner recorded. Net is
+// revenue − cost − expenses; a month with ExpenseEntries == 0 has no ledger at
+// all, which is not the same as having spent nothing.
+type AIMonthlyProfit struct {
+	Month          string  `json:"month"` // "2026-08", Bangkok calendar
+	Revenue        float64 `json:"revenue"`
+	Bills          int64   `json:"bills"`
+	Cost           float64 `json:"cost"`
+	Expenses       float64 `json:"expenses"`
+	ExpenseEntries int64   `json:"expense_entries"`
+}
+
+// ProfitByMonth returns the last `months` calendar months that had paid sales,
+// oldest first, each with its revenue, recipe cost and recorded expenses. Cost
+// is the same cost_snapshot sum the margin tools use, so a month here agrees
+// with the profit tool's answer for that month.
+func (r *AIRepository) ProfitByMonth(restaurantID uint, months int, now time.Time) ([]AIMonthlyProfit, error) {
+	if months <= 0 {
+		months = 6
+	}
+	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -(months - 1), 0)
+	type salesRow struct {
+		Month   string
+		Revenue float64
+		Bills   int64
+		Cost    float64
+	}
+	var sales []salesRow
+	err := r.db.Table("orders").
+		Select(`TO_CHAR(orders.completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month,
+			COALESCE(SUM(orders.grand_total), 0) AS revenue,
+			COUNT(*) AS bills,
+			COALESCE(SUM(deductions.cost), 0) AS cost`).
+		Joins("LEFT JOIN (SELECT order_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_id) deductions ON deductions.order_id = orders.id", restaurantID).
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.status = ? AND orders.payment_status = ? AND orders.completed_at >= ? AND orders.completed_at <= ?",
+			restaurantID, entity.OrderStatusCompleted, entity.PaymentStatusPaid, first, now).
+		Group("month").Order("month").Scan(&sales).Error
+	if err != nil {
+		return nil, err
+	}
+	type expenseRow struct {
+		Month   string
+		Amount  float64
+		Entries int64
+	}
+	var spent []expenseRow
+	if err := r.db.Table("expenses").
+		Select("TO_CHAR(spent_at, 'YYYY-MM') AS month, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS entries").
+		Where("restaurant_id = ? AND deleted_at IS NULL AND spent_at >= ?", restaurantID, first).
+		Group("month").Scan(&spent).Error; err != nil {
+		return nil, err
+	}
+	ledger := make(map[string]expenseRow, len(spent))
+	for _, e := range spent {
+		ledger[e.Month] = e
+	}
+	rows := make([]AIMonthlyProfit, 0, len(sales))
+	for _, s := range sales {
+		e := ledger[s.Month]
+		rows = append(rows, AIMonthlyProfit{Month: s.Month, Revenue: s.Revenue, Bills: s.Bills, Cost: s.Cost, Expenses: e.Amount, ExpenseEntries: e.Entries})
+	}
+	return rows, nil
+}
+
 // SalesForRange aggregates paid, completed sales in the half-open window
 // [start, end). Unlike RecentSalesSummary it is not capped to 14 rows, so it can
 // answer named-month and month-to-month questions.

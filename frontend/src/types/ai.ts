@@ -202,12 +202,35 @@ export type AIForecastResult = {
   stale_days: number;
 };
 
+// A chart the backend computed. The numbers are the answer's own; everything
+// after `series` is a drawing hint (what to emphasise, what to fade and why, a
+// line to compare against) and never carries a figure the text does not.
 export type AIChartData = {
   kind: "bar" | "line" | "pie";
   title: string;
   unit?: string;
   categories: string[];
-  series: { name?: string; values: number[] }[];
+  series: AIChartSeries[];
+  layout?: "horizontal";
+  compare?: boolean;
+  stacked?: boolean;
+  share?: boolean;
+  highlight?: number[];
+  muted?: number[];
+  muted_label?: string;
+  status?: ("critical" | "warning" | "good" | "")[];
+  notes?: string[];
+  reference?: { value: number; label: string };
+};
+
+export type AIChartSeries = {
+  name?: string;
+  values: number[];
+  // "tooltip": not drawn, shown on hover as a breakdown.
+  role?: "tooltip" | "";
+  // 1-based slot in the categorical palette, when the series' colour carries
+  // meaning (cost / expenses / what is left).
+  tone?: number;
 };
 
 // A multi-item change waiting for one confirmation. Its figures are computed in

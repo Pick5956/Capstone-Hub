@@ -1536,6 +1536,36 @@ textarea {
 .ai-chatlist-panel-in .ai-chatlist-card { animation: ai-chatlist-card-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .ai-chatlist-panel-out { pointer-events: none; }
 .ai-chatlist-panel-out .ai-chatlist-card { animation: ai-chatlist-card-out 0.18s ease-in both; }
+/* Chart colours for the assistant's pictures. Categorical slots validated for
+   lightness, chroma, colour-blind separation and contrast in both themes;
+   status colours are reserved for state and never reused as a series. */
+:root {
+  --ai-cat-1: #ea580c;
+  --ai-cat-2: #0d9488;
+  --ai-cat-3: #7c3aed;
+  --ai-cat-4: #65a30d;
+  --ai-critical: #b91c1c;
+  --ai-warning: #b45309;
+  --ai-good: #15803d;
+  --ai-chart-grid: #e8e1d3;
+  --ai-chart-ink: #5c5045;
+  --ai-chart-ink-soft: #8b7f70;
+  --ai-chart-surface: #ffffff;
+}
+.dark {
+  --ai-cat-1: #ea580c;
+  --ai-cat-2: #0d9488;
+  --ai-cat-3: #7c3aed;
+  --ai-cat-4: #65a30d;
+  --ai-critical: #f87171;
+  --ai-warning: #fbbf24;
+  --ai-good: #4ade80;
+  --ai-chart-grid: #332c25;
+  --ai-chart-ink: #c2b7a9;
+  --ai-chart-ink-soft: #8e8274;
+  --ai-chart-surface: #111827;
+}
+
 /* The caret at the end of an answer still being written. */
 .ai-stream-caret {
   display: inline-block;

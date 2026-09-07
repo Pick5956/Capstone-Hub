@@ -137,6 +137,12 @@ const joyboyToolTableStatus AIToolName = "get_table_status"
 // food already sold, and neither of those is rent, wages or the electricity bill.
 const joyboyToolExpenseSummary AIToolName = "get_expense_summary"
 
+// joyboyToolProfitByMonth is profit month by month — the one shape the profit
+// tool cannot give, since it answers one window at a time. It exists so
+// "กำไรรายเดือนย้อนหลัง" has a tool, and so the bar chart under it draws the
+// same figures the sheet states.
+const joyboyToolProfitByMonth AIToolName = "get_profit_by_month"
+
 // joyboyToolCustomerCount counts the people who came, from the headcount the
 // staff record on every bill. Asked "วันนี้มีลูกค้ากี่คน" with nothing to read,
 // the model answered three different ways in three runs — the bill count, the
@@ -225,6 +231,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolSalesForecast,
 	joyboyToolTableStatus,
 	joyboyToolExpenseSummary,
+	joyboyToolProfitByMonth,
 	joyboyToolCustomerCount,
 	joyboyToolCancelledOrders,
 	joyboyToolIngredientDetail,
@@ -290,6 +297,10 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"รับช่วงเวลาได้ทุกแบบ (วันนี้ เมื่อวาน สัปดาห์ที่แล้ว เดือนนี้) ไม่ระบุ = 30 วันล่าสุด " +
 		"ใช้ตอบ: วันนี้มีบิลยกเลิกกี่ใบ เดือนนี้ยกเลิกไปเท่าไหร่ ทำไมถึงยกเลิก ยกเลิกเยอะไหม " +
 		"ไม่รวมรายการอาหารที่ถูกลบออกจากบิลที่ยังจ่ายตามปกติ",
+	joyboyToolProfitByMonth: "กำไรทีละเดือน ย้อนหลัง 6 เดือน: ยอดขาย ต้นทุนวัตถุดิบ รายจ่ายที่บันทึก และกำไรสุทธิ ของแต่ละเดือน " +
+		"ใช้ตอบ: กำไรรายเดือน · กำไรย้อนหลังหลายเดือน · เดือนไหนกำไรดีสุด · แนวโน้มกำไร · เงินจากยอดขายไปไหนแต่ละเดือน " +
+		"ถ้าถามกำไรของเดือนเดียวหรือช่วงเดียว ให้ใช้ get_profit_summary แทน ตัวนี้สำหรับหลายเดือนต่อกันเท่านั้น " +
+		"ระบบวาดกราฟแท่งรายเดือนให้เองจากตัวเลขชุดนี้",
 	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริง แยกตามหมวด " +
 		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
 		// The window used to be described as a hard "30 วันล่าสุด". Asked
@@ -388,7 +399,7 @@ var joyboyToolGroups = []struct {
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
-		AIToolGetProfitSummary, joyboyToolSalesForecast, joyboyToolPaymentMix,
+		AIToolGetProfitSummary, joyboyToolProfitByMonth, joyboyToolSalesForecast, joyboyToolPaymentMix,
 		joyboyToolCancelledOrders,
 	}},
 	{"วัตถุดิบและสต๊อก", []AIToolName{

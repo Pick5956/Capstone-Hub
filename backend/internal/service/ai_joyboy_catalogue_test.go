@@ -384,6 +384,7 @@ func TestTopMenusBarAndOrderTypePie(t *testing.T) {
 	bar := buildTopMenusBarChart([]repository.AIMenuSummary{
 		{MenuName: "น้ำเปล่า", Quantity: 431, Revenue: 2000},
 		{MenuName: "ต้มยำกุ้ง", Quantity: 395, Revenue: 50000},
+		{MenuName: "ชาไทยเย็น", Quantity: 300, Revenue: 14000},
 	})
 	if bar == nil || bar.Kind != AIChartBar || bar.Categories[0] != "น้ำเปล่า" || bar.Series[0].Values[0] != 431 {
 		t.Errorf("top-menus bar wrong: %+v", bar)
@@ -407,18 +408,21 @@ func TestTopMenusBarAndOrderTypePie(t *testing.T) {
 	}
 }
 
-// A plain "what's on the menu" question must not drag a ranking chart along; only
-// a ranking/chart intent does.
-func TestMenuRankingChartWanted(t *testing.T) {
-	for _, q := range []string{"เมนูขายดี 5 อันดับ", "เมนูไหนขายดีสุด", "ขอกราฟเมนูขายดี", "เมนูยอดนิยม"} {
-		if !menuRankingChartWanted(q) {
-			t.Errorf("%q should want a ranking chart", q)
-		}
+// Whether a ranking gets a chart is a matter of shape, not wording: the
+// keyword gate that used to decide it ("ขายดี", "อันดับ", "กราฟ") is gone, so a
+// menu list with three or more sold entries charts and a shorter one does not.
+func TestMenuRankingChartFollowsTheShapeOfTheFigures(t *testing.T) {
+	three := []repository.AIMenuSummary{{MenuName: "a", Quantity: 30}, {MenuName: "b", Quantity: 20}, {MenuName: "c", Quantity: 10}}
+	c := buildTopMenusBarChart(three)
+	if c == nil || c.Layout != "horizontal" || len(c.Highlight) != 1 || c.Highlight[0] != 0 {
+		t.Fatalf("three sold menus should rank as horizontal bars with the top one marked: %+v", c)
 	}
-	for _, q := range []string{"มีเมนูอะไรบ้างในร้านเรา", "ร้านมีเมนูอะไร", "ลิสต์เมนูทั้งหมด"} {
-		if menuRankingChartWanted(q) {
-			t.Errorf("%q is a plain list, no chart", q)
-		}
+	if buildTopMenusBarChart(three[:2]) != nil {
+		t.Error("two entries is not a ranking worth a chart")
+	}
+	// Entries with nothing sold do not count towards the floor.
+	if buildTopMenusBarChart([]repository.AIMenuSummary{{MenuName: "a", Quantity: 5}, {MenuName: "b"}, {MenuName: "c"}}) != nil {
+		t.Error("unsold entries must not pad a ranking into a chart")
 	}
 }
 

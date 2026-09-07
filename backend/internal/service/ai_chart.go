@@ -1,7 +1,10 @@
 package service
 
 import (
+	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"Project-M/internal/repository"
@@ -31,19 +34,65 @@ const (
 
 // AIChartData is a chart-ready payload. Categories are the x-axis labels; each
 // series carries one value per category, in the same order.
+//
+// Everything after Series is a hint the drawing may use and may ignore: which
+// bars to emphasise, which to fade and why, a reference line, a per-category
+// status or note. None of it carries a number the answer text does not.
 type AIChartData struct {
 	Kind       AIChartKind     `json:"kind"`
 	Title      string          `json:"title"`
 	Unit       string          `json:"unit,omitempty"` // e.g. "บาท" — for axis / tooltip
 	Categories []string        `json:"categories"`
 	Series     []AIChartSeries `json:"series"`
+
+	// Layout "horizontal" lays bars left→right with the category on the left —
+	// for rankings, where Thai names are too long to stand under a bar.
+	Layout string `json:"layout,omitempty"`
+	// Compare marks a two-category bar chart as "this against that": the
+	// drawing gives the two bars two colours instead of one.
+	Compare bool `json:"compare,omitempty"`
+	// Stacked stacks the series inside each category (parts of one whole).
+	Stacked bool `json:"stacked,omitempty"`
+	// Share adds each value's share of the total to its label.
+	Share bool `json:"share,omitempty"`
+	// Highlight is the categories drawn at full strength; the rest fade. Empty
+	// means all at full strength.
+	Highlight []int `json:"highlight,omitempty"`
+	// Muted is the categories drawn faded because their figure is not the same
+	// kind as the others (a month with no expenses recorded), with the reason.
+	Muted      []int  `json:"muted,omitempty"`
+	MutedLabel string `json:"muted_label,omitempty"`
+	// Status colours a category by state instead of by series: "critical",
+	// "warning", "good". Aligned with Categories; "" for none.
+	Status []string `json:"status,omitempty"`
+	// Notes is a short remark under a category ("ถึงวันนี้"). Aligned; "" for none.
+	Notes []string `json:"notes,omitempty"`
+	// Reference is a dashed line at a value the reader compares against — the
+	// minimum on a stock chart, the period mean on an average.
+	Reference *AIChartReference `json:"reference,omitempty"`
+}
+
+// AIChartReference is a labelled line at one value on the value axis.
+type AIChartReference struct {
+	Value float64 `json:"value"`
+	Label string  `json:"label"`
 }
 
 // AIChartSeries is one line/set of bars. Values line up with Categories by index.
+// A series with Role "tooltip" is not drawn; it rides along so the hover can
+// show a breakdown (revenue, cost, expenses under a net-profit bar).
 type AIChartSeries struct {
 	Name   string    `json:"name,omitempty"`
 	Values []float64 `json:"values"`
+	Role   string    `json:"role,omitempty"`
+	// Tone is a 1-based slot in the drawing's categorical palette, set when
+	// the series' colour carries meaning; 0 lets the drawing pick by order.
+	Tone int `json:"tone,omitempty"`
 }
+
+// chartHasAtLeast reports whether a chart has enough categories to be worth
+// drawing: a single figure is a sentence, not a picture.
+func chartHasAtLeast(n int, categories []string) bool { return len(categories) >= n }
 
 // buildSalesComparisonChart renders a two-period sales comparison as a bar chart:
 // one bar per period, revenue on the value axis. The labels and numbers match
@@ -55,6 +104,7 @@ func buildSalesComparisonChart(labelA string, revenueA float64, labelB string, r
 		Unit:       "บาท",
 		Categories: []string{labelA, labelB},
 		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: []float64{revenueA, revenueB}}},
+		Compare:    true,
 	}
 }
 
@@ -113,50 +163,439 @@ func buildDailySalesLineChart(days []repository.AISalesSummary) *AIChartData {
 		Unit:       "บาท",
 		Categories: categories,
 		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: values}},
+		Highlight:  []int{len(categories) - 1},
 	}
 }
 
-// menuRankingChartWanted is true when a menu question asks for a ranking or a
-// chart ("เมนูขายดี", "5 อันดับ", "กราฟ") rather than a plain list of what is on
-// the menu ("มีเมนูอะไรบ้าง") — the top-selling tool answers both, but only the
-// former is worth a bar chart.
-func menuRankingChartWanted(question string) bool {
-	n := strings.ToLower(question)
-	for _, k := range []string{
-		"ขายดี", "อันดับ", "มากสุด", "เยอะสุด", "สูงสุด", "ยอดนิยม", "นิยม",
-		"กราฟ", "ชาร์ต", "แผนภูมิ", "top", "chart", "ranking", "best",
-	} {
-		if strings.Contains(n, k) {
-			return true
+// buildMenuRankingChart draws a ranking of menus as horizontal bars — Thai
+// names are too long to stand under a vertical bar on a phone — with the top
+// entry at full strength. Whether to draw it is a question of shape, not of
+// wording: three or more entries with a figure make a ranking worth seeing.
+// Capped so the labels stay readable. nil when there is too little to rank.
+func buildMenuRankingChart(title, unit string, menus []repository.AIMenuSummary, byRevenue bool) *AIChartData {
+	const limit = 6
+	categories := make([]string, 0, limit)
+	values := make([]float64, 0, limit)
+	for _, m := range menus {
+		v := float64(m.Quantity)
+		if byRevenue {
+			v = m.Revenue
+		}
+		if v <= 0 {
+			continue
+		}
+		categories = append(categories, m.MenuName)
+		values = append(values, v)
+		if len(categories) == limit {
+			break
 		}
 	}
-	return false
-}
-
-// buildTopMenusBarChart draws the best-selling menus by quantity — the same
-// ranking the top-selling tool reports — as bars. Capped so the labels stay
-// readable. nil when there is nothing sold.
-func buildTopMenusBarChart(menus []repository.AIMenuSummary) *AIChartData {
-	if len(menus) == 0 {
+	if !chartHasAtLeast(3, categories) {
 		return nil
-	}
-	const limit = 6
-	if len(menus) > limit {
-		menus = menus[:limit]
-	}
-	categories := make([]string, len(menus))
-	values := make([]float64, len(menus))
-	for i, m := range menus {
-		categories[i] = m.MenuName
-		values[i] = float64(m.Quantity)
 	}
 	return &AIChartData{
 		Kind:       AIChartBar,
-		Title:      "เมนูขายดี",
-		Unit:       "รายการ",
+		Title:      title,
+		Unit:       unit,
 		Categories: categories,
-		Series:     []AIChartSeries{{Name: "จำนวน", Values: values}},
+		Series:     []AIChartSeries{{Name: title, Values: values}},
+		Layout:     "horizontal",
+		Highlight:  []int{0},
 	}
+}
+
+// buildTopMenusBarChart keeps its old name for the best-sellers-by-quantity case.
+func buildTopMenusBarChart(menus []repository.AIMenuSummary) *AIChartData {
+	return buildMenuRankingChart("เมนูขายดี", "รายการ", menus, false)
+}
+
+// buildPeakHoursChart draws bills per hour of the day, in clock order, with the
+// busiest hour at full strength — the two peaks and the quiet afternoon that a
+// "busiest hour is 13:00" sentence cannot show. nil under three hours with bills.
+func buildPeakHoursChart(rows []repository.AIPeriodSummary) *AIChartData {
+	sorted := make([]repository.AIPeriodSummary, 0, len(rows))
+	for _, r := range rows {
+		if r.Orders > 0 {
+			sorted = append(sorted, r)
+		}
+	}
+	if len(sorted) < 3 {
+		return nil
+	}
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Period < sorted[j].Period })
+	categories := make([]string, len(sorted))
+	values := make([]float64, len(sorted))
+	best := 0
+	for i, r := range sorted {
+		categories[i] = fmt.Sprintf("%02d", r.Period)
+		values[i] = float64(r.Orders)
+		if r.Orders > sorted[best].Orders {
+			best = i
+		}
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "บิลตามช่วงเวลา",
+		Unit:       "บิล",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "บิล", Values: values}},
+		Highlight:  []int{best},
+	}
+}
+
+// buildPeakWeekdayChart draws bills per weekday, Monday first, busiest day at
+// full strength. nil unless every day of the week is represented.
+func buildPeakWeekdayChart(rows []repository.AIPeriodSummary) *AIChartData {
+	byDay := map[int]int64{}
+	for _, r := range rows {
+		byDay[r.Period] = r.Orders
+	}
+	order := []int{1, 2, 3, 4, 5, 6, 0} // Mon..Sun, the calendar the owner reads
+	short := map[int]string{0: "อา", 1: "จ", 2: "อ", 3: "พ", 4: "พฤ", 5: "ศ", 6: "ส"}
+	categories := make([]string, 0, 7)
+	values := make([]float64, 0, 7)
+	best, bestOrders := 0, int64(-1)
+	for i, day := range order {
+		orders, ok := byDay[day]
+		if !ok {
+			return nil
+		}
+		categories = append(categories, short[day])
+		values = append(values, float64(orders))
+		if orders > bestOrders {
+			best, bestOrders = i, orders
+		}
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "บิลตามวันในสัปดาห์",
+		Unit:       "บิล",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "บิล", Values: values}},
+		Highlight:  []int{best},
+	}
+}
+
+// buildStockVsMinChart draws each low ingredient as its stock in percent of the
+// minimum the owner set, against a line at 100%. Units differ (มล., กรัม), so
+// the share of the minimum is the one axis they all share. Status colours the
+// bar: out is critical, below the minimum is warning. nil under three rows.
+func buildStockVsMinChart(risks []AIStockRisk) *AIChartData {
+	const limit = 7
+	categories := make([]string, 0, limit)
+	values := make([]float64, 0, limit)
+	status := make([]string, 0, limit)
+	for _, r := range risks {
+		if r.MinStock <= 0 {
+			continue
+		}
+		pct := r.Stock / r.MinStock * 100
+		if pct < 0 {
+			pct = 0
+		}
+		categories = append(categories, r.Name)
+		values = append(values, roundTo(pct, 0))
+		if r.Stock <= 0 {
+			status = append(status, "critical")
+		} else if pct < 100 {
+			status = append(status, "warning")
+		} else {
+			status = append(status, "good")
+		}
+		if len(categories) == limit {
+			break
+		}
+	}
+	if !chartHasAtLeast(3, categories) {
+		return nil
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "คงเหลือเทียบขั้นต่ำ",
+		Unit:       "% ของขั้นต่ำ",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "คงเหลือ", Values: values}},
+		Layout:     "horizontal",
+		Status:     status,
+		Reference:  &AIChartReference{Value: 100, Label: "ขั้นต่ำที่ตั้งไว้"},
+	}
+}
+
+// buildExpenseCategoryChart draws spending by category as horizontal bars with
+// each one's share. Bars, not a pie: one category usually takes most of it and
+// a pie leaves the rest as unreadable slivers. nil under two categories.
+func buildExpenseCategoryChart(categories []repository.ExpenseCategoryTotal) *AIChartData {
+	names := make([]string, 0, len(categories))
+	values := make([]float64, 0, len(categories))
+	for _, c := range categories {
+		if c.Amount <= 0 {
+			continue
+		}
+		label := aiExpenseCategoryLabels[strings.ToLower(strings.TrimSpace(c.Category))]
+		if label == "" {
+			label = c.Category
+		}
+		names = append(names, label)
+		values = append(values, c.Amount)
+	}
+	if !chartHasAtLeast(2, names) {
+		return nil
+	}
+	sort.SliceStable(names, func(i, j int) bool { return values[i] > values[j] })
+	sort.SliceStable(values, func(i, j int) bool { return values[i] > values[j] })
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "รายจ่ายแยกหมวด",
+		Unit:       "บาท",
+		Categories: names,
+		Series:     []AIChartSeries{{Name: "รายจ่าย", Values: values}},
+		Layout:     "horizontal",
+		Share:      true,
+		Highlight:  []int{0},
+	}
+}
+
+// buildPaymentMixPieChart shows how bills were paid, the same split the payment
+// tool reports. nil under two methods with money.
+func buildPaymentMixPieChart(mix []repository.AIPaymentMethodSummary) *AIChartData {
+	categories := make([]string, 0, len(mix))
+	values := make([]float64, 0, len(mix))
+	for _, m := range mix {
+		if m.Amount <= 0 {
+			continue
+		}
+		categories = append(categories, aiPaymentMethodThai(m.Method))
+		values = append(values, m.Amount)
+	}
+	if !chartHasAtLeast(2, categories) {
+		return nil
+	}
+	return &AIChartData{
+		Kind:       AIChartPie,
+		Title:      "วิธีชำระเงิน",
+		Unit:       "บาท",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "ยอด", Values: values}},
+	}
+}
+
+// buildMarginPerPlateChart draws margin per plate for the best and the worst
+// menus together — the owner uses both ends, one to push and one to reprice.
+// It is fed the same two lists the margin tools answer from (highest first,
+// lowest first), in their order, so the menu the answer names as best is the
+// top bar: ranking the chart itself, by a different key or from a wider list,
+// put a different menu on top and had the picture disagree with the words.
+// The baht per plate rides along for the hover. Only menus with a recipe
+// cost count. nil under three menus.
+func buildMarginPerPlateChart(highest, lowest []repository.AIMenuMarginSummary) *AIChartData {
+	type plate struct {
+		name    string
+		pct     float64
+		perDish float64
+	}
+	keep := func(m repository.AIMenuMarginSummary) (plate, bool) {
+		if m.Quantity <= 0 || m.Cost <= 0 {
+			return plate{}, false
+		}
+		return plate{m.MenuName, roundTo(m.Margin, 1), roundTo(m.Profit/float64(m.Quantity), 0)}, true
+	}
+	const top, bottom = 4, 3
+	picked := make([]plate, 0, top+bottom)
+	seen := map[string]bool{}
+	for _, m := range highest {
+		if p, ok := keep(m); ok && !seen[p.name] && len(picked) < top {
+			picked = append(picked, p)
+			seen[p.name] = true
+		}
+	}
+	// The lowest list runs worst-first; the chart reads best→worst, so it is
+	// appended in reverse and never repeats a menu already at the top.
+	tail := make([]plate, 0, bottom)
+	for _, m := range lowest {
+		if p, ok := keep(m); ok && !seen[p.name] && len(tail) < bottom {
+			tail = append(tail, p)
+			seen[p.name] = true
+		}
+	}
+	for i := len(tail) - 1; i >= 0; i-- {
+		picked = append(picked, tail[i])
+	}
+	if len(picked) < 3 {
+		return nil
+	}
+	categories := make([]string, len(picked))
+	values := make([]float64, len(picked))
+	perDish := make([]float64, len(picked))
+	for i, p := range picked {
+		categories[i] = p.name
+		values[i] = p.pct
+		perDish[i] = p.perDish
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "กำไรต่อจาน (% ของราคาขาย)",
+		Unit:       "%",
+		Categories: categories,
+		Series: []AIChartSeries{
+			{Name: "กำไร %", Values: values},
+			{Name: "กำไรต่อจาน (บาท)", Values: perDish, Role: "tooltip"},
+		},
+		Layout:    "horizontal",
+		Highlight: []int{0, len(picked) - 1},
+	}
+}
+
+// buildAOVLineChart draws the average bill per day with the period mean as a
+// reference — it tells apart "fewer people came" from "people bought less",
+// which the daily total cannot. nil under three days.
+func buildAOVLineChart(days []repository.AISalesSummary) *AIChartData {
+	type point struct {
+		date string
+		aov  float64
+	}
+	points := make([]point, 0, len(days))
+	var sumRevenue float64
+	var sumOrders int64
+	for _, d := range days {
+		if d.Orders <= 0 || strings.TrimSpace(d.OrderDate) == "" {
+			continue
+		}
+		points = append(points, point{strings.TrimSpace(d.OrderDate), roundTo(d.Revenue/float64(d.Orders), 0)})
+		sumRevenue += d.Revenue
+		sumOrders += d.Orders
+	}
+	if len(points) < 3 || sumOrders == 0 {
+		return nil
+	}
+	sort.SliceStable(points, func(i, j int) bool { return points[i].date < points[j].date })
+	const maxDays = 30
+	if len(points) > maxDays {
+		points = points[len(points)-maxDays:]
+	}
+	categories := make([]string, len(points))
+	values := make([]float64, len(points))
+	for i, p := range points {
+		categories[i] = shortDayMonth(p.date)
+		values[i] = p.aov
+	}
+	mean := roundTo(sumRevenue/float64(sumOrders), 0)
+	return &AIChartData{
+		Kind:       AIChartLine,
+		Title:      "ยอดเฉลี่ยต่อบิลรายวัน",
+		Unit:       "บาท/บิล",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "ต่อบิล", Values: values}},
+		Highlight:  []int{len(categories) - 1},
+		Reference:  &AIChartReference{Value: mean, Label: "เฉลี่ย " + strconv.FormatFloat(mean, 'f', 0, 64)},
+	}
+}
+
+// thaiShortMonthLabel is "ส.ค." for "2026-08".
+func thaiShortMonthLabel(yearMonth string) string {
+	months := [...]string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+	parts := strings.Split(strings.TrimSpace(yearMonth), "-")
+	if len(parts) != 2 {
+		return yearMonth
+	}
+	var m int
+	if _, err := fmt.Sscanf(parts[1], "%d", &m); err != nil || m < 1 || m > 12 {
+		return yearMonth
+	}
+	return months[m-1]
+}
+
+// buildProfitByMonthChart draws net profit per month as one bar each. A month
+// with no expenses recorded is not the same figure as one with — it is gross
+// profit — so it is drawn faded and said so; the current month is marked as
+// running. The revenue, cost and expenses ride along for the hover. nil under
+// two months with sales.
+func buildProfitByMonthChart(rows []repository.AIMonthlyProfit, currentYearMonth string) *AIChartData {
+	categories := make([]string, 0, len(rows))
+	net := make([]float64, 0, len(rows))
+	revenue := make([]float64, 0, len(rows))
+	cost := make([]float64, 0, len(rows))
+	expenses := make([]float64, 0, len(rows))
+	notes := make([]string, 0, len(rows))
+	muted := make([]int, 0, len(rows))
+	for _, r := range rows {
+		if r.Revenue <= 0 {
+			continue
+		}
+		i := len(categories)
+		categories = append(categories, thaiShortMonthLabel(r.Month))
+		net = append(net, roundTo(r.Revenue-r.Cost-r.Expenses, 0))
+		revenue = append(revenue, r.Revenue)
+		cost = append(cost, r.Cost)
+		expenses = append(expenses, r.Expenses)
+		if r.ExpenseEntries == 0 {
+			muted = append(muted, i)
+		}
+		if r.Month == currentYearMonth {
+			notes = append(notes, "ถึงวันนี้")
+		} else {
+			notes = append(notes, "")
+		}
+	}
+	if !chartHasAtLeast(2, categories) {
+		return nil
+	}
+	chart := &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "กำไรสุทธิรายเดือน",
+		Unit:       "บาท",
+		Categories: categories,
+		Series: []AIChartSeries{
+			{Name: "สุทธิ", Values: net},
+			{Name: "ยอดขาย", Values: revenue, Role: "tooltip"},
+			{Name: "ต้นทุน", Values: cost, Role: "tooltip"},
+			{Name: "รายจ่าย", Values: expenses, Role: "tooltip"},
+		},
+		Notes: notes,
+	}
+	if len(muted) > 0 && len(muted) < len(categories) {
+		chart.Muted = muted
+		chart.MutedLabel = "ก่อนหัก ยังไม่มีรายจ่ายบันทึก"
+	}
+	return chart
+}
+
+// buildMoneyFlowChart is the same months as stacked parts of the sale: cost,
+// expenses, and what was left — "ขายได้เยอะแต่ทำไมเหลือน้อย" in one picture.
+func buildMoneyFlowChart(rows []repository.AIMonthlyProfit) *AIChartData {
+	categories := make([]string, 0, len(rows))
+	cost := make([]float64, 0, len(rows))
+	expenses := make([]float64, 0, len(rows))
+	left := make([]float64, 0, len(rows))
+	for _, r := range rows {
+		if r.Revenue <= 0 {
+			continue
+		}
+		categories = append(categories, thaiShortMonthLabel(r.Month))
+		cost = append(cost, r.Cost)
+		expenses = append(expenses, r.Expenses)
+		left = append(left, roundTo(r.Revenue-r.Cost-r.Expenses, 0))
+	}
+	if !chartHasAtLeast(2, categories) {
+		return nil
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "เงินจากยอดขายไปไหน",
+		Unit:       "บาท",
+		Categories: categories,
+		Series: []AIChartSeries{
+			{Name: "ต้นทุนวัตถุดิบ", Values: cost, Tone: 2},
+			{Name: "รายจ่าย", Values: expenses, Tone: 3},
+			{Name: "เหลือ", Values: left, Tone: 1},
+		},
+		Stacked: true,
+	}
+}
+
+// roundTo rounds to the given decimals.
+func roundTo(v float64, decimals int) float64 {
+	pow := math.Pow(10, float64(decimals))
+	return math.Round(v*pow) / pow
 }
 
 // orderTypeLabel turns the stored order type into the Thai the owner reads.

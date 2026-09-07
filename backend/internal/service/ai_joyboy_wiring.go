@@ -224,6 +224,14 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 // is small and runs at low effort.
 // readPeriod is every tool's way to the model's period read: the one started
 // early when the parallel preflight is on, a fresh call otherwise.
+// offerChart attaches a picture to the answer if none is attached yet: the
+// first tool with a shape worth seeing owns the chart.
+func (t *joyboyTools) offerChart(chart *AIChartData) {
+	if chart != nil && t.chart == nil {
+		t.chart = chart
+	}
+}
+
 func (t *joyboyTools) readPeriod(question string, history []AIConversationMessage, now time.Time) (datedSalesRequest, bool) {
 	if t.periodReader != nil {
 		return t.periodReader(question, history, now)
@@ -351,6 +359,20 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			}
 		}
 		return joyboyCustomerCountBody(label, parties, open, live), true, true
+	case joyboyToolProfitByMonth:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		rows, err := t.service.repo.ProfitByMonth(t.restaurantID, 6, now)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		current := now.Format("2006-01")
+		t.offerChart(buildProfitByMonthChart(rows, current))
+		return joyboyProfitByMonthBody(rows, current), true, true
+
 	case joyboyToolExpenseSummary:
 		if t.service.actionExpenses == nil {
 			return "", false, true
@@ -376,6 +398,9 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
+		if list != nil {
+			t.offerChart(buildExpenseCategoryChart(list.Categories))
+		}
 		return t.withPeriodCoverage(joyboyExpenseSummaryBody(label, from, until, list),
 			label, start, end, list == nil || list.Entries == 0), true, true
 	case AIToolGetPeakPeriods:
@@ -398,6 +423,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
 			return "", false, false
 		}
+		t.offerChart(buildPeakHoursChart(hours))
 		return joyboyPeakForPeriodBody(label, weekdays, hours), true, true
 
 	case AIToolGetOrderTypeBreakdown:
@@ -413,6 +439,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
 			return "", false, false
 		}
+		t.offerChart(buildOrderTypePieChart(rows))
 		return joyboyOrderTypeForPeriodBody(label, rows), true, true
 
 	case joyboyToolOrderDetail:
@@ -538,6 +565,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s coverage failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
+		t.offerChart(buildPaymentMixPieChart(mix))
 		return joyboyPaymentMixBody(label, mix, coverage), true, true
 
 	case joyboyToolTableUsage:
@@ -879,21 +907,32 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 	// sheet used: a trend as a daily line, best-sellers as bars, order types as a
 	// pie. The first chart-worthy tool wins, and only when no chart was already
 	// set (a dated comparison owns the chart when it runs).
+	// Whether a tool gets a picture is decided by the shape of its figures —
+	// three or more entries to rank, a series over days, parts of a whole — and
+	// never by a word in the question. Each builder returns nil below its own
+	// floor, so a single figure stays a sentence.
 	if t.chart == nil {
 		for _, name := range names {
 			var chart *AIChartData
 			switch AIToolName(strings.TrimSpace(name)) {
-			case AIToolGetSalesTrend:
+			case AIToolGetSalesTrend, AIToolGetSalesSummary:
 				chart = buildDailySalesLineChart(snapshot.SalesDays)
+			case AIToolGetAverageOrderValue:
+				chart = buildAOVLineChart(snapshot.SalesDays)
 			case AIToolGetTopSellingMenus:
-				// The model reaches for this tool even to just list the menus
-				// ("มีเมนูอะไรบ้าง"), so only draw a ranking chart when the question
-				// actually asks for one — never for a plain list.
-				if menuRankingChartWanted(question) {
-					chart = buildTopMenusBarChart(snapshot.TopMenuItems)
-				}
+				chart = buildTopMenusBarChart(snapshot.TopMenuItems)
+			case AIToolGetMenuRevenueRanking:
+				chart = buildMenuRankingChart("เมนูทำเงินสูงสุด", "บาท", snapshot.TopMenusByRevenue, true)
+			case AIToolGetSlowMovingMenus:
+				chart = buildMenuRankingChart("เมนูขายได้น้อยที่สุด", "รายการ", snapshot.SlowMovingMenus, false)
+			case AIToolGetHighestMarginMenu, AIToolGetLowestMarginMenu, AIToolGetMenuEngineering:
+				chart = buildMarginPerPlateChart(snapshot.HighMarginMenus, snapshot.LowMarginMenus)
 			case AIToolGetOrderTypeBreakdown:
 				chart = buildOrderTypePieChart(snapshot.OrderTypeBreakdown)
+			case AIToolGetPeakPeriods:
+				chart = buildPeakHoursChart(snapshot.PeakHours)
+			case AIToolGetLowStockIngredients:
+				chart = buildStockVsMinChart(snapshot.StockRisks)
 			}
 			if chart != nil {
 				t.chart = chart

@@ -62,6 +62,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_ingredient_usage_recorded_in_period":      "ยังไม่มีการตัดสต็อกจากการขายในช่วงนี้ จึงยังไม่มีต้นทุนวัตถุดิบที่ใช้ไป = 0 บาท ไม่ใช่ว่าร้านไม่มีต้นทุน",
 	"no_ingredient_usage_recorded_to_project_from": "ยังไม่มีการใช้วัตถุดิบในช่วงนี้ จึงคำนวณไม่ได้ว่าของจะหมดในกี่วัน ห้ามประมาณจำนวนวันเอง",
 	"no_orders_recorded_in_period":                "ยังไม่มีบิลในช่วงนี้ ยอดขาย = 0 บาท ออเดอร์ = 0 ไม่มีตัวเลขอื่นให้อ้าง",
+	"no_paid_sales_in_the_last_months":            "ไม่มีบิลที่จ่ายแล้วเลยในช่วงหลายเดือนที่ผ่านมา จึงไม่มีกำไรรายเดือนให้แสดง",
 	"no_orders_recorded_in_that_period":           "ช่วงที่ถามไม่มีบิลที่ชำระเงินเลย ยอดขาย = 0 บาท ออเดอร์ = 0 ห้ามยกตัวเลขช่วงอื่นมาแทน",
 	"no_paid_orders_in_period":                    "ช่วงที่ถามไม่มีบิลที่ชำระเงินเลย ยอดขาย = 0 บาท ออเดอร์ = 0 ห้ามยกตัวเลขช่วงอื่นมาแทน",
 	"no_paid_sales_in_period":                     "ช่วงที่ถามไม่มียอดขายที่ชำระเงิน รายได้ ต้นทุน กำไร = 0 ทั้งหมด ห้ามยกตัวเลขช่วงอื่นมาแทน",
@@ -1792,4 +1793,34 @@ func joyboyDaysLeftLabel(daysLeft float64) string {
 		return fmt.Sprintf("พออีกประมาณ %d วัน", int(daysLeft))
 	}
 	return fmt.Sprintf("พออีกประมาณ %d วัน (%.0f สัปดาห์)", int(daysLeft), daysLeft/7)
+}
+
+// joyboyProfitByMonthBody is the sheet for profit month by month: one line
+// each, oldest first, and the two facts that change how the figures read —
+// which months have no expense ledger (their "net" is gross), and that the
+// current month is still running.
+func joyboyProfitByMonthBody(rows []repository.AIMonthlyProfit, currentYearMonth string) string {
+	if len(rows) == 0 {
+		return joyboyNoData("no_paid_sales_in_the_last_months")
+	}
+	lines := []string{"scope=calendar_months_bangkok oldest_first=true", "net=revenue-cost-recorded_expenses"}
+	var unrecorded []string
+	for _, r := range rows {
+		net := r.Revenue - r.Cost - r.Expenses
+		line := fmt.Sprintf("month=%s revenue=%s bills=%d cost=%s expenses=%s expense_items=%d net=%s",
+			r.Month, joyboyNum(r.Revenue), r.Bills, joyboyNum(r.Cost), joyboyNum(r.Expenses), r.ExpenseEntries, joyboyNum(net))
+		if r.Month == currentYearMonth {
+			line += " partial=month_still_running"
+		}
+		lines = append(lines, line)
+		if r.ExpenseEntries == 0 {
+			unrecorded = append(unrecorded, r.Month)
+		}
+	}
+	if len(unrecorded) > 0 {
+		lines = append(lines, "months_without_recorded_expenses="+strings.Join(unrecorded, ","),
+			"gap_means=เดือนพวกนี้ไม่มีรายจ่ายบันทึกไว้ในระบบ net ของเดือนนั้นจึงเป็นกำไรก่อนหักรายจ่าย ไม่ใช่ว่าไม่มีค่าใช้จ่าย "+
+				"ห้ามเทียบว่าเดือนพวกนี้กำไรดีกว่าเดือนที่มีรายจ่ายบันทึก ให้บอกเจ้าของตรง ๆ ว่าตัวเลขคนละแบบ")
+	}
+	return joyboyJoin(lines)
 }
