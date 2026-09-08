@@ -157,8 +157,14 @@ test('conversation clear is blocked while the first ask or an action mutation is
   assert.equal(canClearAIConversation({}), true);
 });
 
-test('manual cancel, asking again, and clearing chat share the server cancellation path', () => {
+test('leaving a pending confirm card behind cancels it on the server first', () => {
+  // The server refuses every other command while a card is pending, so a new
+  // chat, opening another chat, and switching restaurant all go through the
+  // one helper that cancels the plan or preview server-side before dropping it.
   const screenSource = readFileSync(new URL('../../app/ai-assistant.tsx', import.meta.url), 'utf8');
-  assert.match(screenSource, /async function discardPendingActionPreview\(\): Promise<boolean>/);
-  assert.equal((screenSource.match(/await discardPendingActionPreview\(\)/g) ?? []).length, 3);
+  assert.match(screenSource, /const discardPending = useCallback\(\(\) => \{[\s\S]*?cancelAIActionPlan\(plan\.id\)[\s\S]*?cancelAIAction\(preview\.id\)/);
+  assert.ok(screenSource.split(' discardPending();').length - 1 >= 2);
+  // The card's own cancel button reaches the same endpoints.
+  assert.match(screenSource, /onCancel=\{\(\) => \{ cancelAIActionPlan\(pendingPlan\.id\)/);
+  assert.match(screenSource, /onCancel=\{\(\) => \{ cancelAIAction\(pendingPreview\.id\)/);
 });

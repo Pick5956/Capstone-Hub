@@ -1,0 +1,151 @@
+import { Pressable, ScrollView, View } from 'react-native';
+
+import { AppIcon, type AppIconName } from '@/src/components/app-icon';
+import { AppText as Text } from '@/src/components/app-text';
+import type { DisplayLanguage } from '@/src/lib/display-preferences';
+import type { AIInsight } from '@/src/types/ai';
+
+import { BottomSheet } from './chrome';
+import { ai } from './theme';
+
+// "ควรรู้วันนี้": the proactive cards, a port of the web's AIInsightsPanel as a
+// half-height sheet. Tone is carried by a word label and an icon tile, never by
+// colour alone. Tapping a card closes the sheet and asks about it.
+
+export function insightKey(insight: AIInsight): string {
+  return `${insight.kind}|${insight.title}|${insight.metric}`;
+}
+
+function toneFor(severity: AIInsight['severity'], kind: string) {
+  if (severity === 'critical') return { ...ai.rose, label: 'ด่วน', labelEn: 'Urgent' };
+  if (severity === 'warning') return { ...ai.amberTone, label: 'ต้องดู', labelEn: 'Watch' };
+  if (kind === 'sales_up') return { ...ai.emerald, label: '', labelEn: '' };
+  return { ...ai.neutral, label: '', labelEn: '' };
+}
+
+function iconFor(kind: string): AppIconName {
+  switch (kind) {
+    case 'ingredient_low': return 'cube-outline';
+    case 'dead_stock': return 'archive-outline';
+    case 'sales_drop': return 'trending-down-outline';
+    case 'sales_up': return 'trending-up-outline';
+    case 'plowhorse': return 'restaurant-outline';
+    default: return 'cash-outline';
+  }
+}
+
+function questionFor(insight: AIInsight, language: DisplayLanguage): string {
+  const name = insight.items?.[0]?.name || insight.title;
+  if (language === 'th') {
+    switch (insight.kind) {
+      case 'ingredient_low': return `${name} เหลือเท่าไหร่ ควรสั่งเพิ่มเท่าไหร่`;
+      case 'dead_stock': return `${name} ค้างสต๊อกนานแค่ไหน ควรทำยังไง`;
+      case 'sales_drop': return 'ทำไมยอดขายวันนี้ต่ำกว่าปกติ';
+      case 'sales_up': return 'วันนี้ขายดีเพราะอะไร เมนูไหนขายดี';
+      case 'plowhorse': return `${name} ขายดีแต่กำไรต่ำ ควรปรับราคาไหม`;
+      default: return `${insight.title} หมายความว่ายังไง`;
+    }
+  }
+  switch (insight.kind) {
+    case 'ingredient_low': return `How much ${name} is left and how much should I reorder?`;
+    case 'dead_stock': return `How long has ${name} been sitting in stock and what should I do?`;
+    case 'sales_drop': return 'Why are sales lower than usual today?';
+    case 'sales_up': return 'Why are sales up today and which items are selling?';
+    case 'plowhorse': return `${name} sells well but has a low margin, should I reprice it?`;
+    default: return `What does "${insight.title}" mean?`;
+  }
+}
+
+export function InsightsSheet({
+  open,
+  onClose,
+  insights,
+  loading,
+  language,
+  onAsk,
+}: {
+  open: boolean;
+  onClose: () => void;
+  insights: AIInsight[] | null;
+  loading: boolean;
+  language: DisplayLanguage;
+  onAsk: (question: string) => void;
+}) {
+  const t = (th: string, en: string) => (language === 'th' ? th : en);
+  const urgent = insights?.filter((insight) => insight.severity === 'critical').length ?? 0;
+  const count = insights?.length ?? 0;
+
+  return (
+    <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: '#0a0a0a', letterSpacing: -0.15 }}>{t('ควรรู้วันนี้', "Today's insights")}</Text>
+        {count > 0 ? (
+          <Text style={{ fontSize: 12, color: ai.faded }}>
+            {urgent > 0 ? <Text style={{ color: '#be123c', fontWeight: '600' }}>{t(`${urgent} เรื่องด่วน`, `${urgent} urgent`)}</Text> : null}
+            {urgent > 0 ? ' · ' : ''}
+            {t(`${count} เรื่อง`, `${count} items`)}
+          </Text>
+        ) : null}
+      </View>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 10 }} keyboardShouldPersistTaps="handled">
+        {loading && !insights ? (
+          <Text style={{ fontSize: 13, color: ai.faint, paddingVertical: 12 }}>{t('กำลังตรวจข้อมูลร้าน', 'Checking the shop')}</Text>
+        ) : count === 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, backgroundColor: 'rgba(236,253,245,0.7)', paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#d1fae5' }}>
+            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#d1fae5', alignItems: 'center', justifyContent: 'center' }}>
+              <AppIcon name="checkmark" size={16} color="#065f46" />
+            </View>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '500', color: '#065f46' }}>{t('ทุกอย่างปกติ ไม่มีเรื่องต้องรีบวันนี้', 'All clear, nothing urgent today')}</Text>
+          </View>
+        ) : (
+          insights?.map((insight) => {
+            const tone = toneFor(insight.severity, insight.kind);
+            const label = language === 'th' ? tone.label : tone.labelEn;
+            return (
+              <Pressable
+                key={insightKey(insight)}
+                accessibilityRole="button"
+                onPress={() => { onClose(); onAsk(questionFor(insight, language)); }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  gap: 10,
+                  borderRadius: 16,
+                  padding: 12,
+                  backgroundColor: tone.bg,
+                  borderWidth: 1,
+                  borderColor: tone.ring,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: tone.chip, alignItems: 'center', justifyContent: 'center' }}>
+                  <AppIcon name={iconFor(insight.kind)} size={18} color={tone.fg} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {label ? (
+                    <View style={{ alignSelf: 'flex-start', borderRadius: 999, backgroundColor: tone.chip, paddingHorizontal: 7, paddingVertical: 1, marginBottom: 3 }}>
+                      <Text style={{ fontSize: 10.5, fontWeight: '600', color: tone.fg }}>{label}</Text>
+                    </View>
+                  ) : null}
+                  <Text style={{ fontSize: 14.5, lineHeight: 19, fontWeight: '600', color: ai.ink, letterSpacing: -0.15 }}>{insight.title}</Text>
+                  <Text style={{ fontSize: 12.5, lineHeight: 18, color: ai.faint, marginTop: 2 }}>
+                    {insight.metric ? <Text style={{ fontWeight: '600', color: tone.fg === ai.neutral.fg ? ai.body : tone.fg, fontVariant: ['tabular-nums'] }}>{insight.metric} </Text> : null}
+                    {insight.detail}
+                  </Text>
+                  {insight.items && insight.items.length > 1 ? (
+                    <Text style={{ fontSize: 12, color: ai.faded, marginTop: 3 }} numberOfLines={2}>
+                      {insight.items.map((item) => item.name).join(' · ')}
+                      {insight.more ? t(` · อีก ${insight.more} อย่าง`, ` · ${insight.more} more`) : ''}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+        {count > 0 ? (
+          <Text style={{ alignSelf: 'center', fontSize: 12, color: ai.faded, marginTop: 2 }}>{t('แตะการ์ดเพื่อถามผู้ช่วยเรื่องนั้น', 'Tap a card to ask about it')}</Text>
+        ) : null}
+      </ScrollView>
+    </BottomSheet>
+  );
+}

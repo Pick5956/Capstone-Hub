@@ -1,19 +1,51 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, usePathname } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  TextInput as NativeTextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  askOperationsAI,
+  askOperationsAIStream,
   cancelAIAction,
+  cancelAIActionPlan,
   confirmAIAction,
+  confirmAIActionPlan,
   deleteAIConversation,
-  getOperationsSnapshot,
+  getAIConversationTurns,
+  getProactiveInsights,
+  listAIConversations,
+  renameAIConversation,
 } from '@/src/api/ai';
 import { AppIcon } from '@/src/components/app-icon';
-import { AppText as Text } from '@/src/components/app-text';
-import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, EmptyState, Feedback, SectionHeader, Surface } from '@/src/components/ui';
+import { AppText as Text } from '@/src/components/app-text';
+import {
+  AIResponseContent,
+  AssistantRow,
+  FollowUpList,
+  OutcomeLine,
+  StreamCaret,
+  ThinkingText,
+  UserBubble,
+} from '@/src/components/ai/bubbles';
+import { AIChart } from '@/src/components/ai/chart';
+import { ChatListSheet } from '@/src/components/ai/chat-list-sheet';
+import { GlassButton } from '@/src/components/ai/chrome';
+import { Composer } from '@/src/components/ai/composer';
+import { ConfirmCard, type ConfirmState } from '@/src/components/ai/confirm-card';
+import { InsightsSheet, insightKey } from '@/src/components/ai/insights-sheet';
+import { AIOrb } from '@/src/components/ai/orb';
+import { SettingsSheet } from '@/src/components/ai/settings-sheet';
+import { ai } from '@/src/components/ai/theme';
+import { Feedback } from '@/src/components/ui';
 import {
   type AIGuidedAction,
   canUseAIAssistant,
@@ -22,647 +54,613 @@ import {
   resolveAIClarificationRequest,
   resolveAINavigationRequest,
 } from '@/src/lib/ai-actions';
+import { formatAIActionConfirmationMessage, getAIActionErrorMessage } from '@/src/lib/ai-action-preview';
 import {
-  describeAIActionPreview,
-  formatAIActionConfirmationMessage,
-  getAIActionCancellationErrorMessage,
-  getAIActionErrorMessage,
-  isTerminalAIActionCancellationError,
-} from '@/src/lib/ai-action-preview';
-import { canClearAIConversation, selectAIConversationId } from '@/src/lib/ai-contract';
+  type AIChatMessage,
+  answerChips,
+  isConversationGone,
+  readAIOutage,
+  turnsToMessages,
+  welcomeFor,
+} from '@/src/lib/ai-chat';
+import { recentConversationHistory } from '@/src/lib/ai-conversation';
 import {
-  appendConversationTurn,
-  createAIConversationRequestGuard,
-  recentConversationHistory,
-  selectOperationsSnapshot,
-} from '@/src/lib/ai-conversation';
-import { parseAIResponseBlocks } from '@/src/lib/ai-response';
-import { money } from '@/src/lib/format';
+  readActiveThread,
+  readCachedOwnerTitle,
+  readFollowUpsEnabled,
+  readSeenInsights,
+  writeActiveThread,
+  writeSeenInsights,
+} from '@/src/lib/ai-prefs';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints } from '@/src/theme';
 import type {
+  AIActionPlan,
   AIActionPreview,
   AIConversationMessage,
-  AISnapshot,
+  AIConversationSummary,
+  AIInsight,
 } from '@/src/types/ai';
 
-function AIResponseContent({ content }: { content: string }) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {parseAIResponseBlocks(content).map((block, blockIndex) => (
-        <View
-          key={`${block.kind}-${blockIndex}`}
-          style={{
-            flexDirection: block.kind === 'bullet' ? 'row' : 'column',
-            alignItems: 'flex-start',
-            gap: block.kind === 'bullet' ? spacing.sm : 0,
-          }}
-        >
-          {block.marker ? (
-            <Text style={[typeScale.body, { minWidth: 18, color: palette.muted }]}>
-              {block.marker}
-            </Text>
-          ) : null}
-          <Text
-            selectable
-            style={[
-              block.kind === 'heading' ? typeScale.cardTitle : typeScale.body,
-              { flexShrink: 1, color: palette.text },
-            ]}
-          >
-            {block.segments.map((segment, segmentIndex) => (
-              <Text
-                key={`${segment.text}-${segmentIndex}`}
-                style={{ fontWeight: segment.bold ? '800' : undefined }}
-              >
-                {segment.text}
-              </Text>
-            ))}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
+// The assistant, the way the web page draws it: one full-height chat on a
+// cream canvas, the four glass buttons top-right, the orb greeting on an empty
+// thread, streaming answers with charts and follow-ups, and the confirm card
+// under any command. The dock stays out: this screen lives under "More".
+
+const SUGGESTIONS_TH = ['สรุปร้าน', 'เมนูขายดี', 'วัตถุดิบใกล้หมด', 'มูลค่าสต๊อก'];
+const SUGGESTIONS_EN = ['Shop summary', 'Best sellers', 'Low stock', 'Stock value'];
+
+function availabilityLabel(isAvailable: boolean, language: 'th' | 'en'): string {
+  if (language === 'th') return isAvailable ? 'เปิดขาย' : 'ปิดขาย';
+  return isAvailable ? 'Available' : 'Unavailable';
 }
 
-function AIActionPreviewPanel({
-  preview,
-  language,
-  confirming,
-  cancelling,
-  error,
-  onConfirm,
-  onCancel,
-}: {
-  preview: AIActionPreview;
-  language: 'th' | 'en';
-  confirming: boolean;
-  cancelling: boolean;
-  error: string | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const presentation = describeAIActionPreview(preview, language);
-  return (
-    <View
-      style={{ gap: spacing.md }}
-    >
-      <Feedback
-        title={presentation.title}
-        detail={presentation.description}
-        tone="warning"
-      />
-      <View style={{ gap: spacing.xs }}>
-        <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-          {presentation.menuLabel}
-        </Text>
-        <Text selectable style={typeScale.cardTitle}>{presentation.menuName}</Text>
-        {presentation.summary ? (
-          <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-            {presentation.summary}
-          </Text>
-        ) : null}
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-            {presentation.currentLabel}
-          </Text>
-          <Text selectable style={{ color: palette.text, fontSize: 14, fontWeight: '700' }}>
-            {presentation.currentValue}
-          </Text>
-        </View>
-        <AppIcon color={palette.warning} name="arrow-forward" size={19} />
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text selectable style={[typeScale.caption, { color: palette.warning }]}>
-            {presentation.requestedLabel}
-          </Text>
-          <Text selectable style={{ color: palette.warning, fontSize: 14, fontWeight: '700' }}>
-            {presentation.requestedValue}
-          </Text>
-        </View>
-      </View>
-      <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-        {presentation.expiresLabel}: {presentation.expiresValue}
-      </Text>
-      {presentation.warnings.length ? (
-        <View style={{ gap: spacing.xs }}>
-          <Text selectable style={{ color: palette.warning, fontSize: 13, fontWeight: '700' }}>
-            {presentation.warningsLabel}
-          </Text>
-          {presentation.warnings.map((warning, index) => (
-            <Text
-              key={`${index}-${warning}`}
-              selectable
-              style={[typeScale.caption, { color: palette.warning }]}
-            >
-              • {warning}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-      {error ? <Feedback title={error} tone="danger" /> : null}
-      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <Button
-          variant="secondary"
-          icon="close-outline"
-          label={cancelling ? presentation.cancellingLabel : presentation.cancelLabel}
-          onPress={onCancel}
-          disabled={confirming || cancelling}
-          loading={cancelling}
-          style={{ flex: 1 }}
-        />
-        <Button
-          icon="checkmark-outline"
-          label={confirming ? presentation.confirmingLabel : presentation.confirmLabel}
-          onPress={onConfirm}
-          loading={confirming}
-          disabled={cancelling}
-          style={{ flex: 1 }}
-        />
-      </View>
-    </View>
-  );
+function newId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 export default function AIAssistantScreen() {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const pathname = usePathname();
-  const prompts = language === 'th'
-    ? ['สรุปสถานการณ์ร้านวันนี้ให้หน่อย', 'พรุ่งนี้ควรเตรียมวัตถุดิบอะไรเพิ่ม?', 'เมนูไหนขายดีและกระทบสต็อกมากที่สุด?', 'มีความเสี่ยงวัตถุดิบขาดหรือซื้อเกินไหม?']
-    : ['Summarize restaurant operations today.', 'Which ingredients should we prepare more of tomorrow?', 'Which best-selling items affect stock the most?', 'Are any ingredients at risk of running out or being overstocked?'];
   const canUseAI = canUseAIAssistant(activeMembership?.role?.name);
-  const [snapshot, setSnapshot] = useState<AISnapshot | null>(null);
-  const [history, setHistory] = useState<AIConversationMessage[]>([]);
+  const scope = `${activeMembership?.restaurant_id ?? 0}:${activeMembership?.user_id ?? 0}`;
+  const wide = width >= breakpoints.tablet;
+
+  const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [actions, setActions] = useState<AIGuidedAction[]>([]);
-  const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
-  const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
-  const [actionConfirming, setActionConfirming] = useState(false);
-  const [actionCancelling, setActionCancelling] = useState(false);
-  const [actionPreviewError, setActionPreviewError] = useState<string | null>(null);
-  const [clearingConversation, setClearingConversation] = useState(false);
-  const [conversationClearError, setConversationClearError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [question, setQuestion] = useState('');
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const conversationRequestsRef = useRef(createAIConversationRequestGuard());
-  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
-  useEffect(() => {
-    conversationRequestsRef.current.clearConversation();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: 'error' | 'info' } | null>(null);
+  const [ownerTitle, setOwnerTitle] = useState('');
+  const [followUpsOn, setFollowUpsOn] = useState(true);
+
+  const [pendingPlan, setPendingPlan] = useState<AIActionPlan | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<AIActionPreview | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState('');
+
+  const [insights, setInsights] = useState<AIInsight[] | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [seenInsights, setSeenInsights] = useState<string[]>([]);
+  const [conversations, setConversations] = useState<AIConversationSummary[] | null>(null);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+  const conversationsStale = useRef(true);
+
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const [stickToBottom, setStickToBottom] = useState(true);
+  const [showJump, setShowJump] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const inputRef = useRef<NativeTextInput | null>(null);
+  const generation = useRef(0);
+
+  const hasPermission = useCallback((permission: string) => can(activeMembership, permission), [activeMembership]);
+  const welcome = welcomeFor(language, ownerTitle);
+  const suggestions = language === 'th' ? SUGGESTIONS_TH : SUGGESTIONS_EN;
+  const busy = loading || threadLoading;
+
+  // ---------------------------------------------------------------- loading
+
+  // A card the owner never answered still blocks every other command on the
+  // server until it is confirmed or cancelled — so leaving it behind (new chat,
+  // opening another chat, switching restaurant) cancels it there first.
+  const pendingRef = useRef<{ plan: AIActionPlan | null; preview: AIActionPreview | null }>({ plan: null, preview: null });
+  pendingRef.current = { plan: pendingPlan, preview: pendingPreview };
+
+  const discardPending = useCallback(() => {
+    const { plan, preview } = pendingRef.current;
+    if (plan) cancelAIActionPlan(plan.id).catch(() => undefined);
+    if (preview) cancelAIAction(preview.id).catch(() => undefined);
+    setPendingPlan(null);
+    setPendingPreview(null);
+  }, []);
+
+  const resetThread = useCallback(() => {
+    generation.current += 1;
+    discardPending();
+    setMessages([]);
     setConversationId(null);
-    setHistory([]);
-    setSnapshot(null);
-    setActions([]);
-    setPendingAction(null);
-    setPendingActionPreview(null);
-    setActionConfirming(false);
-    setActionCancelling(false);
-    setActionPreviewError(null);
-    setClearingConversation(false);
-    setConversationClearError(null);
-    setNotice(null);
+    setDraft(null);
     setLoading(false);
-    setError(null);
-  }, [activeMembership?.restaurant_id, activeMembership?.user_id]);
+    setNotice(null);
+  }, [discardPending]);
+
+  const openThread = useCallback(async (id: string) => {
+    const mine = ++generation.current;
+    setThreadLoading(true);
+    discardPending();
+    setMessages([]);
+    setConversationId(id);
+    setNotice(null);
+    try {
+      const { turns } = await getAIConversationTurns(id);
+      if (generation.current !== mine) return;
+      setMessages(turnsToMessages(turns ?? []));
+      setStickToBottom(true);
+      await writeActiveThread(scope, id);
+    } catch (error) {
+      if (generation.current !== mine) return;
+      setConversationId(null);
+      await writeActiveThread(scope, null);
+      if (!isConversationGone(error)) {
+        setNotice({ text: copy('เปิดแชทไม่สำเร็จ', 'Could not open the chat'), tone: 'error' });
+      }
+    } finally {
+      if (generation.current === mine) setThreadLoading(false);
+    }
+  }, [copy, discardPending, scope]);
+
   useEffect(() => {
     if (!canUseAI) return;
+    resetThread();
     let active = true;
-    getOperationsSnapshot()
-      .then((nextSnapshot) => {
-        if (active) setSnapshot((current) => selectOperationsSnapshot(current, nextSnapshot));
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : copy('โหลดข้อมูลวิเคราะห์ไม่สำเร็จ', 'Could not load analytics data.'));
-        }
-      });
+    void readCachedOwnerTitle().then((title) => { if (active) setOwnerTitle(title); });
+    void readFollowUpsEnabled().then((enabled) => { if (active) setFollowUpsOn(enabled); });
+    void readSeenInsights(scope).then((keys) => { if (active) setSeenInsights(keys); });
+    void readActiveThread(scope).then((id) => { if (active && id) void openThread(id); });
+    setInsightsLoading(true);
+    getProactiveInsights()
+      .then((res) => { if (active) setInsights(res.insights ?? []); })
+      .catch(() => { if (active) setInsights([]); })
+      .finally(() => { if (active) setInsightsLoading(false); });
+    conversationsStale.current = true;
+    setConversations(null);
     return () => { active = false; };
-  }, [activeMembership?.restaurant_id, canUseAI, copy]);
-  const canRecommend = snapshot?.analysis_readiness.can_recommend_business_actions;
-  const latestAnswer = useMemo(() => [...history].reverse().find((item) => item.role === 'assistant')?.content, [history]);
+  }, [canUseAI, openThread, resetThread, scope]);
 
-  async function ask(value = question) {
-    const trimmed = value.trim();
-    if (!trimmed || loading || actionConfirming || actionCancelling || clearingConversation) return;
-    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
-    const hasPermission = (permission: string) => can(activeMembership, permission);
+  const loadConversations = useCallback(async () => {
+    setConversationsLoading(true);
+    try {
+      const res = await listAIConversations();
+      setConversations(res.conversations ?? []);
+      conversationsStale.current = false;
+    } catch {
+      setConversations((current) => current ?? []);
+    } finally {
+      setConversationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (listOpen && conversationsStale.current) void loadConversations();
+  }, [listOpen, loadConversations]);
+
+  useEffect(() => {
+    if (!insightsOpen || !insights || insights.length === 0) return;
+    const keys = insights.map(insightKey);
+    setSeenInsights((current) => {
+      const merged = Array.from(new Set([...current, ...keys]));
+      void writeSeenInsights(scope, merged);
+      return merged;
+    });
+  }, [insights, insightsOpen, scope]);
+
+  const unseenInsights = useMemo(
+    () => (insights ?? []).filter((insight) => !seenInsights.includes(insightKey(insight))).length,
+    [insights, seenInsights],
+  );
+
+  // ---------------------------------------------------------------- asking
+
+  const history = useMemo<AIConversationMessage[]>(
+    () => recentConversationHistory(messages.map((message) => ({ role: message.role, content: message.content }))),
+    [messages],
+  );
+
+  const append = useCallback((message: AIChatMessage) => {
+    setMessages((current) => [...current, message]);
+    setStickToBottom(true);
+  }, []);
+
+  const ask = useCallback(async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed || loading) return;
     setNotice(null);
-    setActions([]);
-    setPendingAction(null);
-    setActionPreviewError(null);
-    setConversationClearError(null);
-    setError(null);
+    setInput('');
+    append({ id: newId('q'), role: 'user', content: trimmed, createdAt: new Date() });
 
     const navigation = resolveAINavigationRequest(trimmed, hasPermission, pathname, language, canUseAI);
     if (navigation) {
-      setQuestion('');
-      setNotice(navigation.message);
-      if (navigation.kind === 'suggest') {
-        setActions(navigation.options.map((option) => ({
-          id: option.href,
-          href: option.href,
-          label: option.label,
-        })));
-      } else if (!navigation.alreadyThere) {
-        router.push(navigation.href as never);
-      }
+      append({
+        id: newId('nav'),
+        role: 'assistant',
+        content: navigation.message,
+        createdAt: new Date(),
+        actions: navigation.kind === 'suggest' ? navigation.options.map((option) => ({ id: option.href, ...option })) : undefined,
+      });
+      if (navigation.kind === 'navigate' && !navigation.alreadyThere) router.push(navigation.href as never);
       return;
     }
-
     const clarification = resolveAIClarificationRequest(trimmed, hasPermission, language, canUseAI);
     if (clarification) {
-      setQuestion('');
-      setNotice(clarification.message);
-      setActions(clarification.actions);
+      append({ id: newId('clarify'), role: 'assistant', content: clarification.message, createdAt: new Date(), actions: clarification.actions });
       return;
     }
 
-    const nextHistory = recentConversationHistory([
-      ...history,
-      { role: 'user' as const, content: trimmed },
-    ]);
-    const request = conversationRequestsRef.current.beginRequest();
-    setHistory(nextHistory); setQuestion(''); setLoading(true); setError(null);
+    const mine = generation.current;
+    setLoading(true);
+    setDraft(null);
     try {
-      const response = await askOperationsAI(
-        trimmed,
-        recentConversationHistory(history),
-        conversationId,
-      );
-      if (!conversationRequestsRef.current.canApplyResponse(request)) return;
-      setConversationId((current) => selectAIConversationId(current, response.conversation_id));
-      setHistory(appendConversationTurn(history, trimmed, response.answer));
-      setSnapshot((current) => selectOperationsSnapshot(current, response.snapshot));
-      setPendingActionPreview(response.action_preview ?? null);
-      setActions(response.intent === 'unclear'
-        ? getUnclearAIActions(hasPermission, language, canUseAI)
-        : response.intent === 'analysis'
-          ? getGuidedAIActions(trimmed, response.answer, hasPermission, language, canUseAI)
-          : []);
-    } catch (err) {
-      if (conversationRequestsRef.current.canApplyResponse(request)) {
-        setError(err instanceof Error ? err.message : copy('ผู้ช่วยวิเคราะห์ตอบไม่ได้ในขณะนี้', 'The analytics assistant cannot respond right now.'));
+      const data = await askOperationsAIStream(trimmed, history, conversationId, {
+        onDraft: (text) => { if (generation.current === mine) setDraft(text); },
+      });
+      if (generation.current !== mine) return;
+      const answer = data.answer?.trim();
+      if (!answer) throw new Error(copy('ผู้ช่วยตอบไม่ได้ในขณะนี้', 'The assistant could not answer'));
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        void writeActiveThread(scope, data.conversation_id);
+        conversationsStale.current = true;
+      }
+      if (data.action_plan) {
+        setPendingPlan(data.action_plan);
+        setPendingQuestion(trimmed);
+      }
+      if (data.action_preview) {
+        setPendingPreview(data.action_preview);
+        setPendingQuestion(trimmed);
+      }
+      const written = answerChips(data.follow_ups, data.navigate, language);
+      const actions = written
+        ?? (data.intent === 'unclear'
+          ? getUnclearAIActions(hasPermission, language, canUseAI)
+          : data.intent === 'analysis'
+            ? getGuidedAIActions(trimmed, answer, hasPermission, language, canUseAI)
+            : []);
+      append({
+        id: data.turn_id ? `${data.turn_id}` : newId('a'),
+        role: 'assistant',
+        content: answer,
+        createdAt: new Date(),
+        chart: data.chart,
+        toolsUsed: data.tools_used,
+        scopeAssumed: data.scope_assumed,
+        planId: data.action_plan?.id,
+        previewId: data.action_preview?.id,
+        actions: actions.length > 0 ? actions : undefined,
+      });
+    } catch (error) {
+      if (generation.current !== mine) return;
+      if (isConversationGone(error)) {
+        setConversationId(null);
+        void writeActiveThread(scope, null);
+        setNotice({ text: copy('แชทนี้ถูกลบไปแล้ว เริ่มแชทใหม่ได้เลย', 'This chat was deleted. Start a new one'), tone: 'error' });
+        return;
+      }
+      const outage = readAIOutage(error);
+      if (outage) {
+        const wait = outage.retryAfterSeconds ? Math.ceil(outage.retryAfterSeconds / 60) : 0;
+        setNotice({
+          text: outage.kind === 'quota'
+            ? copy(`โควตา AI วันนี้เต็มแล้ว${wait ? ` ลองใหม่ในอีก ${wait} นาที` : ''}`, `Today's AI quota is used up${wait ? `, try again in ${wait} min` : ''}`)
+            : copy('ผู้ให้บริการ AI ไม่ตอบ ลองใหม่ในสักครู่', 'The AI provider is not responding, try again shortly'),
+          tone: 'error',
+        });
+        return;
+      }
+      setNotice({
+        text: error instanceof Error && error.message ? error.message : copy('ผู้ช่วยตอบไม่ได้ในขณะนี้', 'The assistant could not answer'),
+        tone: 'error',
+      });
+    } finally {
+      if (generation.current === mine) {
+        setLoading(false);
+        setDraft(null);
       }
     }
-    finally {
-      if (conversationRequestsRef.current.canApplyResponse(request)) setLoading(false);
-    }
-  }
+  }, [append, canUseAI, conversationId, copy, hasPermission, history, language, loading, pathname, scope]);
 
-  function handleAction(action: AIGuidedAction) {
+  const onAction = useCallback((action: AIGuidedAction) => {
     if (action.prompt) {
       void ask(action.prompt);
       return;
     }
-    if (!action.href) return;
-    if (action.requiresConfirmation) {
-      setPendingAction(action);
+    if (action.href) router.push(action.href as never);
+  }, [ask]);
+
+  // ---------------------------------------------------------------- commands
+
+  const confirmPlan = useCallback(async () => {
+    const plan = pendingPlan;
+    if (!plan) return;
+    const result = await confirmAIActionPlan(plan.id, plan.confirmation_token);
+    setMessages((current) => current.map((message) => (
+      message.planId === plan.id
+        ? { ...message, outcome: { tone: result.failed > 0 && result.succeeded === 0 ? 'bad' : 'good', text: result.message } }
+        : message
+    )));
+    if (result.succeeded === 0 && result.failed > 0) throw new Error(result.message);
+  }, [pendingPlan]);
+
+  const confirmPreview = useCallback(async () => {
+    const preview = pendingPreview;
+    if (!preview) return;
+    try {
+      const result = await confirmAIAction(preview.id, preview.confirmation_token);
+      const text = formatAIActionConfirmationMessage(result, language);
+      setMessages((current) => current.map((message) => (
+        message.previewId === preview.id ? { ...message, outcome: { tone: 'good', text } } : message
+      )));
+    } catch (error) {
+      throw new Error(getAIActionErrorMessage(error, language));
+    }
+  }, [language, pendingPreview]);
+
+  const reissue = useCallback(() => {
+    setPendingPlan(null);
+    setPendingPreview(null);
+    if (!pendingQuestion) return;
+    setInput(pendingQuestion);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [pendingQuestion]);
+
+  const onResolved = useCallback((kind: 'plan' | 'preview', state: ConfirmState) => {
+    if (state === 'confirming') return;
+    if (state === 'cancelled' || state === 'expired') {
+      const text = state === 'cancelled'
+        ? copy('ยกเลิกแล้ว · ไม่มีการแก้ข้อมูล', 'Cancelled · nothing changed')
+        : copy('คำสั่งหมดอายุ · ไม่มีการแก้ข้อมูล', 'Expired · nothing changed');
+      setMessages((current) => current.map((message) => (
+        (kind === 'plan' && message.planId && message.planId === pendingPlan?.id)
+        || (kind === 'preview' && message.previewId && message.previewId === pendingPreview?.id)
+          ? { ...message, outcome: { tone: 'muted', text } }
+          : message
+      )));
+    }
+    if (state === 'done' || state === 'cancelled') {
+      if (kind === 'plan') setPendingPlan(null);
+      else setPendingPreview(null);
+    }
+  }, [copy, pendingPlan?.id, pendingPreview?.id]);
+
+  // ---------------------------------------------------------------- chats
+
+  const startNewChat = useCallback(() => {
+    resetThread();
+    void writeActiveThread(scope, null);
+    setTimeout(() => inputRef.current?.focus(), 200);
+  }, [resetThread, scope]);
+
+  const renameChat = useCallback(async (id: string, title: string) => {
+    await renameAIConversation(id, title);
+    setConversations((current) => current?.map((row) => (row.id === id ? { ...row, title, title_by_owner: true } : row)) ?? null);
+  }, []);
+
+  const deleteChat = useCallback(async (id: string) => {
+    try {
+      await deleteAIConversation(id);
+    } catch {
+      setNotice({ text: copy('ลบแชทไม่สำเร็จ', 'Could not delete the chat'), tone: 'error' });
       return;
     }
-    router.push(action.href as never);
-  }
+    setConversations((current) => current?.filter((row) => row.id !== id) ?? null);
+    if (id === conversationId) startNewChat();
+  }, [conversationId, copy, startNewChat]);
 
-  async function handleConfirmActionPreview() {
-    const preview = pendingActionPreview;
-    if (!preview || actionConfirming || actionCancelling || clearingConversation) return;
-    const request = conversationRequestsRef.current.beginRequest();
-    setActionConfirming(true);
-    setActionPreviewError(null);
-    try {
-      const confirmation = await confirmAIAction(preview.id, preview.confirmation_token);
-      if (!conversationRequestsRef.current.canApplyResponse(request)) return;
-      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
-      setHistory((current) => recentConversationHistory([
-        ...current,
-        {
-          role: 'assistant',
-          content: formatAIActionConfirmationMessage(confirmation, language),
-        },
-      ]));
-      setActions([]);
-      getOperationsSnapshot()
-        .then((nextSnapshot) => {
-          if (conversationRequestsRef.current.canApplyResponse(request)) {
-            setSnapshot(nextSnapshot);
-          }
-        })
-        .catch(() => undefined);
-    } catch (confirmationError) {
-      if (conversationRequestsRef.current.canApplyResponse(request)) {
-        setActionPreviewError(getAIActionErrorMessage(confirmationError, language));
-      }
-    } finally {
-      if (conversationRequestsRef.current.canApplyResponse(request)) {
-        setActionConfirming(false);
-      }
-    }
-  }
-
-  async function discardPendingActionPreview(): Promise<boolean> {
-    const preview = pendingActionPreview;
-    if (!preview) return true;
-    if (actionConfirming || actionCancelling || clearingConversation) return false;
-    const request = conversationRequestsRef.current.beginRequest();
-    setActionCancelling(true);
-    setActionPreviewError(null);
-    try {
-      await cancelAIAction(preview.id);
-      if (!conversationRequestsRef.current.canApplyResponse(request)) return false;
-      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
-      return true;
-    } catch (cancellationError) {
-      if (!conversationRequestsRef.current.canApplyResponse(request)) return false;
-      if (isTerminalAIActionCancellationError(cancellationError)) {
-        setPendingActionPreview((current) => current?.id === preview.id ? null : current);
-        setNotice(copy(
-          'รายการ AI นี้ใช้ต่อไม่ได้แล้ว ระบบนำออกจากหน้าจอ กรุณาขอรายการใหม่หากยังต้องการดำเนินการ',
-          'This AI action is no longer usable and was removed. Request a new action if it is still needed.',
-        ));
-        getOperationsSnapshot()
-          .then((nextSnapshot) => {
-            if (conversationRequestsRef.current.canApplyResponse(request)) {
-              setSnapshot((current) => selectOperationsSnapshot(current, nextSnapshot));
-            }
-          })
-          .catch(() => undefined);
-        return true;
-      }
-      setActionPreviewError(getAIActionCancellationErrorMessage(language));
-      return false;
-    } finally {
-      if (conversationRequestsRef.current.canApplyResponse(request)) {
-        setActionCancelling(false);
-      }
-    }
-  }
-
-  async function handleCancelActionPreview() {
-    await discardPendingActionPreview();
-  }
-
-  async function handleClearConversation() {
-    if (!canClearAIConversation({
-      loading,
-      actionConfirming,
-      actionCancelling,
-      clearingConversation,
-    })) return;
-    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
-    const serverConversationId = conversationId;
-    conversationRequestsRef.current.clearConversation();
-    const clearRequest = conversationRequestsRef.current.beginRequest();
-    setConversationId(null);
-    setHistory([]);
-    setActions([]);
-    setPendingAction(null);
-    setPendingActionPreview(null);
-    setActionPreviewError(null);
-    setNotice(null);
-    setLoading(false);
-    setError(null);
-    setConversationClearError(null);
-    if (!serverConversationId) return;
-
-    setClearingConversation(true);
-    try {
-      await deleteAIConversation(serverConversationId);
-    } catch {
-      if (conversationRequestsRef.current.canApplyResponse(clearRequest)) {
-        setConversationClearError(copy(
-          'ล้างบทสนทนาในแอปแล้ว แต่เซิร์ฟเวอร์ยืนยันการลบไม่ได้ ระบบจะไม่ใช้บทสนทนาเดิมต่อ',
-          'The local chat was cleared, but the server could not confirm deletion. The old conversation will not be reused.',
-        ));
-      }
-    } finally {
-      if (conversationRequestsRef.current.canApplyResponse(clearRequest)) {
-        setClearingConversation(false);
-      }
-    }
-  }
-
-  const snapshotPanel = snapshot ? (
-    <Surface>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
-        <AppIcon color={palette.muted} name="analytics-outline" size={20} />
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text selectable style={typeScale.title}>{copy('ข้อมูลร้าน', 'Restaurant data')}</Text>
-          <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-            {canRecommend ? copy('พร้อมวิเคราะห์', 'Ready to analyze') : copy('ข้อมูลต้นทุนหรือสูตรยังไม่ครบ', 'Cost or recipe data is incomplete')}
-          </Text>
-        </View>
-      </View>
-      <View style={{ flexDirection: tabletWorkspace ? 'column' : 'row', flexWrap: 'wrap', gap: spacing.lg }}>
-        {[
-          { icon: 'cube-outline' as const, value: snapshot.inventory_summary.total_items.toLocaleString(language === 'th' ? 'th-TH' : 'en-US'), label: copy('วัตถุดิบ', 'Ingredients') },
-          { icon: 'alert-circle-outline' as const, value: (snapshot.inventory_summary.low_items + snapshot.inventory_summary.out_items).toLocaleString(language === 'th' ? 'th-TH' : 'en-US'), label: copy('ต้องตรวจ', 'Need review') },
-          { icon: 'wallet-outline' as const, value: money(snapshot.inventory_summary.value, language), label: copy('มูลค่าคงคลัง', 'Inventory value') },
-        ].map((item) => (
-          <View key={item.label} style={{ minWidth: 112, flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <AppIcon color={palette.muted} name={item.icon} size={18} />
-            <View style={{ flex: 1, gap: 1 }}>
-              <Text selectable style={typeScale.number}>{item.value}</Text>
-              <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-      {(snapshot.analysis_readiness.warnings ?? []).map((warning) => (
-        <View key={warning} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.border }}>
-          <AppIcon color={palette.warning} name="warning-outline" size={18} />
-          <Text selectable style={[typeScale.caption, { flex: 1, color: palette.warning }]}>{warning}</Text>
-        </View>
-      ))}
-    </Surface>
-  ) : null;
-
-  const conversationPanel = (
-    <Surface>
-      <SectionHeader
-        title={copy('บทสนทนา', 'Conversation')}
-        detail={latestAnswer ? copy('คำตอบล่าสุดอยู่ล่างสุด', 'Latest answer is at the bottom') : copy('ถามจากข้อมูลล่าสุดของร้าน', 'Ask from current restaurant data')}
-        action={history.length ? (
-          <Button
-            compact
-            variant="ghost"
-            icon="trash-outline"
-            label={clearingConversation ? copy('กำลังล้าง...', 'Clearing...') : copy('ล้าง', 'Clear')}
-            onPress={() => { void handleClearConversation(); }}
-            loading={clearingConversation}
-            disabled={loading || actionConfirming || actionCancelling}
-          />
-        ) : undefined}
-      />
-      {history.length ? history.map((item, index) => (
-        <View
-          key={`${item.role}-${index}`}
-          style={{
-            borderTopWidth: index ? 1 : 0,
-            borderTopColor: palette.border,
-            paddingTop: index ? spacing.lg : 0,
-          }}
-        >
-          {item.role === 'user' ? (
-            <View style={{ alignSelf: 'flex-end', maxWidth: '86%', borderRadius: radius.md, backgroundColor: palette.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
-              <Text selectable style={[typeScale.body, { color: palette.primaryText }]}>{item.content}</Text>
-            </View>
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-              <AppIcon color={palette.muted} name="sparkles-outline" size={19} />
-              <View style={{ flex: 1 }}><AIResponseContent content={item.content} /></View>
-            </View>
-          )}
-        </View>
-      )) : (
-        <EmptyState title={copy('ยังไม่มีบทสนทนา', 'No conversation yet')} detail={copy('เลือกคำถามตัวอย่างหรือพิมพ์คำถามด้านล่าง', 'Choose a prompt or type a question below.')} />
-      )}
-    </Surface>
-  );
-
-  const resultPanel = notice || actions.length || pendingAction || pendingActionPreview ? (
-    <Surface>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <AppIcon color={palette.muted} name="navigate-outline" size={20} />
-        <Text selectable style={typeScale.title}>{copy('ขั้นตอนถัดไป', 'Next steps')}</Text>
-      </View>
-      {notice ? <Feedback title={notice} tone="info" /> : null}
-      {actions.length ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {actions.map((action) => (
-            <Button compact key={action.id} variant="secondary" icon="arrow-forward-outline" label={action.label} onPress={() => handleAction(action)} />
-          ))}
-        </View>
-      ) : null}
-      {pendingAction ? (
-        <View style={{ gap: spacing.md }}>
-          <Feedback
-            title={copy('ยืนยันก่อนเปิดหน้าตรวจสอบ', 'Confirm before opening the review page')}
-            detail={pendingAction.description || copy('ระบบจะเปิดหน้าที่เกี่ยวข้องโดยไม่แก้ไขข้อมูลอัตโนมัติ', 'The related page will open without changing any data automatically.')}
-            tone="warning"
-          />
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button variant="secondary" icon="close-outline" label={copy('ยกเลิก', 'Cancel')} onPress={() => setPendingAction(null)} style={{ flex: 1 }} />
-            <Button
-              icon="open-outline"
-              label={copy('ยืนยันและเปิด', 'Confirm and open')}
-              onPress={() => {
-                if (pendingAction.href) router.push(pendingAction.href as never);
-                setPendingAction(null);
-              }}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
-      ) : null}
-      {pendingActionPreview ? (
-        <AIActionPreviewPanel
-          preview={pendingActionPreview}
-          language={language}
-          confirming={actionConfirming}
-          cancelling={actionCancelling}
-          error={actionPreviewError}
-          onConfirm={() => { void handleConfirmActionPreview(); }}
-          onCancel={() => { void handleCancelActionPreview(); }}
-        />
-      ) : null}
-    </Surface>
-  ) : null;
-
-  const composerPanel = (
-    <Surface>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <AppIcon color={palette.muted} name="chatbubble-ellipses-outline" size={20} />
-        <Text selectable style={typeScale.title}>{copy('ถามผู้ช่วย', 'Ask AI')}</Text>
-      </View>
-      <View style={{ gap: spacing.sm }}>
-        {prompts.map((prompt) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: loading || actionConfirming || actionCancelling || clearingConversation }}
-            disabled={loading || actionConfirming || actionCancelling || clearingConversation}
-            key={prompt}
-            onPress={() => { void ask(prompt); }}
-            style={({ pressed }) => ({
-              minHeight: 44,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.sm,
-              borderTopWidth: 1,
-              borderTopColor: palette.border,
-              paddingVertical: spacing.sm,
-              opacity: loading || actionConfirming || actionCancelling || clearingConversation ? 0.5 : pressed ? 0.68 : 1,
-            })}
-          >
-            <Text style={[typeScale.caption, { flex: 1, fontWeight: '600' }]}>{prompt}</Text>
-            <AppIcon color={palette.muted} name="arrow-forward-circle-outline" size={20} />
-          </Pressable>
-        ))}
-      </View>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ gap: spacing.sm }}>
-          <View>
-            <View style={{ pointerEvents: 'none', position: 'absolute', top: spacing.md, left: spacing.md, zIndex: 1 }}>
-              <AppIcon color={palette.muted} name="create-outline" size={19} />
-            </View>
-            <TextInput
-              accessibilityLabel={copy('คำถามสำหรับผู้ช่วย AI', 'Question for the AI assistant')}
-              multiline
-              maxLength={800}
-              value={question}
-              onChangeText={setQuestion}
-              placeholder={copy('เช่น พรุ่งนี้ควรเตรียมอะไรเพิ่ม?', 'For example: What should we prepare more of tomorrow?')}
-              placeholderTextColor={palette.placeholder}
-              style={{ minHeight: 104, borderWidth: 1, borderColor: palette.controlBorder, borderRadius: radius.md, backgroundColor: palette.surfaceSubtle, color: palette.text, fontSize: 16, paddingLeft: 44, paddingRight: spacing.md, paddingVertical: spacing.md, textAlignVertical: 'top' }}
-            />
-          </View>
-          <Button icon="send-outline" label={loading ? copy('กำลังวิเคราะห์...', 'Analyzing...') : copy('ส่งคำถาม', 'Send question')} onPress={() => { void ask(); }} loading={loading} disabled={!question.trim() || actionConfirming || actionCancelling || clearingConversation} />
-        </View>
-      </KeyboardAvoidingView>
-    </Surface>
-  );
+  // ---------------------------------------------------------------- render
 
   if (!canUseAI) {
     return (
       <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel={false}>
-        <Feedback title={copy('ไม่มีสิทธิ์ใช้ผู้ช่วยวิเคราะห์', 'Analytics assistant access unavailable')} detail={copy('ผู้ช่วยวิเคราะห์เปิดให้ใช้งานเฉพาะเจ้าของร้าน', 'The analytics assistant is available to restaurant owners only.')} tone="info" />
+        <Feedback
+          title={copy('ไม่มีสิทธิ์ใช้ผู้ช่วยวิเคราะห์', 'Analytics assistant access unavailable')}
+          detail={copy('ผู้ช่วยวิเคราะห์เปิดให้ใช้งานเฉพาะเจ้าของร้าน', 'The analytics assistant is available to restaurant owners only.')}
+          tone="info"
+        />
       </AppScreen>
     );
   }
 
+  const empty = messages.length === 0 && !loading && !threadLoading;
+  const planAnchor = pendingPlan ? messages.find((message) => message.planId === pendingPlan.id)?.id ?? null : null;
+  const previewAnchor = pendingPreview ? messages.find((message) => message.previewId === pendingPreview.id)?.id ?? null : null;
+
+  const planCard = pendingPlan && pendingPlan.items.length > 0 ? (
+    <ConfirmCard
+      key={pendingPlan.id}
+      summary={pendingPlan.summary}
+      items={pendingPlan.items.map((item) => ({ title: item.title, change: item.change, unit: item.unit, sideEffects: item.side_effects }))}
+      warnings={pendingPlan.warnings}
+      detail={copy(`แก้ข้อมูลจริง ${pendingPlan.items.length} รายการ`, `changes ${pendingPlan.items.length} record(s)`)}
+      expiresAt={pendingPlan.expires_at}
+      onConfirm={confirmPlan}
+      onCancel={() => { cancelAIActionPlan(pendingPlan.id).catch(() => undefined); }}
+      onReissue={reissue}
+      onResolved={(state) => onResolved('plan', state)}
+      language={language}
+    />
+  ) : null;
+
+  const previewCard = pendingPreview ? (
+    <ConfirmCard
+      key={pendingPreview.id}
+      summary={pendingPreview.summary}
+      items={[{
+        title: pendingPreview.target.name,
+        change: `${availabilityLabel(pendingPreview.current.is_available, language)} → ${availabilityLabel(pendingPreview.requested.is_available, language)}`,
+      }]}
+      warnings={pendingPreview.warnings}
+      detail={copy('แก้ข้อมูลจริง 1 รายการ', 'changes 1 record')}
+      expiresAt={pendingPreview.expires_at}
+      onConfirm={confirmPreview}
+      onCancel={() => { cancelAIAction(pendingPreview.id).catch(() => undefined); }}
+      onReissue={reissue}
+      onResolved={(state) => onResolved('preview', state)}
+      language={language}
+    />
+  ) : null;
+
   return (
-    <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel={false}>
-      {error ? <Feedback title={copy('วิเคราะห์ข้อมูลไม่ได้', 'Could not analyze data')} detail={error} tone="danger" /> : null}
-      {conversationClearError ? (
-        <Feedback
-          title={copy('ล้างบทสนทนาเฉพาะในแอปแล้ว', 'Local conversation cleared')}
-          detail={conversationClearError}
-          tone="warning"
-        />
-      ) : null}
-      {tabletWorkspace ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xl }}>
-          <View style={{ flex: 1.35, gap: spacing.xl }}>
-            {conversationPanel}
-            {resultPanel}
-          </View>
-          <View style={{ flex: 0.85, gap: spacing.xl }}>
-            {snapshotPanel}
-            {composerPanel}
+    <View style={{ flex: 1, backgroundColor: ai.canvas }}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(255,206,164,0)', 'rgba(255,206,164,0.35)', 'rgba(255,172,104,0.55)']}
+        locations={[0, 0.55, 1]}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
+      />
+      <View style={{ paddingTop: insets.top, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingRight: 14, zIndex: 3 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy('ย้อนกลับ', 'Back')}
+          onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/more' as never); }}
+          hitSlop={8}
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', height: 44, paddingRight: 8, opacity: pressed ? 0.6 : 1 })}
+        >
+          <AppIcon name="chevron-back" size={24} color={ai.deep} />
+          <Text style={{ fontSize: 14, fontWeight: '500', color: ai.deep }}>{copy('ระบบทั้งหมด', 'All tools')}</Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
+          <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
+          <GlassButton icon="create-outline" label={copy('เริ่มแชทใหม่', 'New chat')} onPress={startNewChat} />
+          <GlassButton icon="settings-outline" label={copy('ตั้งค่า AI', 'AI settings')} onPress={() => setSettingsOpen(true)} />
+        </View>
+      </View>
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+        <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: wide ? 760 : undefined }}>
+          {empty ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 24 }}>
+              <AIOrb size={128} speed={20} style={{ shadowColor: ai.orange, shadowOpacity: 0.4, shadowRadius: 25, shadowOffset: { width: 0, height: 15 } }} />
+              <Text style={{ fontSize: 19, fontWeight: '600', color: '#0a0a0a', textAlign: 'center' }}>{welcome}</Text>
+            </View>
+          ) : (
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                ref={scrollRef}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 14 }}
+                onContentSizeChange={() => { if (stickToBottom) scrollRef.current?.scrollToEnd({ animated: true }); }}
+                onScroll={(event) => {
+                  const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+                  const fromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+                  const near = fromBottom < 80;
+                  setStickToBottom(near);
+                  setShowJump(fromBottom > 240);
+                }}
+                scrollEventThrottle={64}
+              >
+                {threadLoading ? (
+                  <AssistantRow><ThinkingText text={copy('กำลังเปิดแชท', 'Opening the chat')} /></AssistantRow>
+                ) : null}
+                {messages.map((message) => (
+                  message.role === 'user' ? (
+                    <UserBubble key={message.id} text={message.content} />
+                  ) : (
+                    <View key={message.id} style={{ gap: 14 }}>
+                      <AssistantRow>
+                        <AIResponseContent content={message.content} />
+                        {message.chart ? <AIChart data={message.chart} /> : null}
+                        {planAnchor === message.id ? planCard : null}
+                        {previewAnchor === message.id ? previewCard : null}
+                        {message.outcome ? <OutcomeLine tone={message.outcome.tone} text={message.outcome.text} /> : null}
+                      </AssistantRow>
+                      {followUpsOn && message.actions && message.actions.length > 0 ? (
+                        <FollowUpList heading={copy('ถามต่อได้เลย', 'Ask next')} actions={message.actions} disabled={loading} onPress={onAction} />
+                      ) : null}
+                    </View>
+                  )
+                ))}
+                {pendingPlan && planAnchor === null ? <AssistantRow>{planCard}</AssistantRow> : null}
+                {pendingPreview && previewAnchor === null ? <AssistantRow>{previewCard}</AssistantRow> : null}
+                {loading && draft ? (
+                  <AssistantRow>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <View style={{ flexShrink: 1 }}><AIResponseContent content={draft} /></View>
+                      <StreamCaret />
+                    </View>
+                  </AssistantRow>
+                ) : null}
+                {loading && !draft ? (
+                  <AssistantRow><ThinkingText text={copy('กำลังวิเคราะห์', 'Analyzing')} /></AssistantRow>
+                ) : null}
+              </ScrollView>
+              {showJump ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={copy('ไปที่ข้อความล่าสุด', 'Jump to latest')}
+                  onPress={() => { setStickToBottom(true); scrollRef.current?.scrollToEnd({ animated: true }); }}
+                  style={{ position: 'absolute', bottom: 8, alignSelf: 'center', width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: ai.hairline, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 }}
+                >
+                  <AppIcon name="chevron-down" size={18} color={ai.muted} />
+                </Pressable>
+              ) : null}
+            </View>
+          )}
+
+          <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 10) + 4, gap: 8 }}>
+            {notice ? (
+              <Pressable accessibilityRole="button" onPress={() => setNotice(null)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: notice.tone === 'error' ? '#fef2f2' : '#eff6ff', borderWidth: 1, borderColor: notice.tone === 'error' ? '#fecaca' : '#bfdbfe' }}>
+                <AppIcon name={notice.tone === 'error' ? 'alert-circle-outline' : 'information-circle-outline'} size={16} color={notice.tone === 'error' ? '#b91c1c' : '#1d4ed8'} />
+                <Text style={{ flex: 1, fontSize: 12.5, color: notice.tone === 'error' ? '#b91c1c' : '#1e40af' }}>{notice.text}</Text>
+                <AppIcon name="close" size={14} color={ai.faded} />
+              </Pressable>
+            ) : null}
+            {empty ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingHorizontal: 6, paddingBottom: 2 }}>
+                {suggestions.map((suggestion) => (
+                  <Pressable
+                    key={suggestion}
+                    accessibilityRole="button"
+                    onPress={() => { void ask(suggestion); }}
+                    style={({ pressed }) => ({ minHeight: 36, justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: pressed ? '#fdba74' : '#e5e7eb', backgroundColor: 'rgba(255,255,255,0.7)', paddingHorizontal: 14, paddingVertical: 7 })}
+                  >
+                    <Text style={{ fontSize: 12.5, fontWeight: '500', color: ai.body }}>{suggestion}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            <Composer
+              ref={inputRef}
+              value={input}
+              onChange={setInput}
+              onSend={() => { void ask(input); }}
+              onInsert={(text) => { setInput(text); setTimeout(() => inputRef.current?.focus(), 50); }}
+              onNotice={(text, tone) => setNotice({ text, tone })}
+              sending={loading}
+              disabled={busy && !loading}
+              language={language}
+            />
           </View>
         </View>
-      ) : (
-        <View style={{ gap: spacing.xl }}>
-          {snapshotPanel}
-          {conversationPanel}
-          {resultPanel}
-          {composerPanel}
-        </View>
-      )}
-    </AppScreen>
+      </KeyboardAvoidingView>
+
+      <InsightsSheet
+        open={insightsOpen}
+        onClose={() => setInsightsOpen(false)}
+        insights={insights}
+        loading={insightsLoading}
+        language={language}
+        onAsk={(question) => { void ask(question); }}
+      />
+      <ChatListSheet
+        open={listOpen}
+        onClose={() => setListOpen(false)}
+        conversations={conversations}
+        loading={conversationsLoading}
+        activeId={conversationId}
+        language={language}
+        onOpen={(id) => { if (id !== conversationId) void openThread(id); }}
+        onNew={startNewChat}
+        onRename={renameChat}
+        onDelete={deleteChat}
+      />
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        language={language}
+        onOwnerTitle={setOwnerTitle}
+        onFollowUps={setFollowUpsOn}
+      />
+    </View>
   );
 }
