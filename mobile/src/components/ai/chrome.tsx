@@ -1,7 +1,7 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Pressable, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Animated, Easing, Modal, PanResponder, Pressable, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
@@ -50,6 +50,7 @@ export function GlassButton({
   label,
   onPress,
   badge,
+  dot,
   active,
   size = 40,
 }: {
@@ -57,6 +58,8 @@ export function GlassButton({
   label: string;
   onPress: () => void;
   badge?: number;
+  /** A small unread mark, when a count would be noise. */
+  dot?: boolean;
   active?: boolean;
   size?: number;
 }) {
@@ -106,6 +109,21 @@ export function GlassButton({
           {icon_}
         </View>
       )}
+      {dot && !badge ? (
+        <View
+          style={{
+            position: 'absolute',
+            top: 1,
+            right: 1,
+            width: 10,
+            height: 10,
+            borderRadius: 5,
+            backgroundColor: ai.orange,
+            borderWidth: 2,
+            borderColor: ai.canvas,
+          }}
+        />
+      ) : null}
       {badge ? (
         <LinearGradient
           colors={[ai.orange, ai.amber]}
@@ -129,6 +147,117 @@ export function GlassButton({
         </LinearGradient>
       ) : null}
     </Pressable>
+  );
+}
+
+
+export type GlassMenuItem = {
+  key: string;
+  icon: AppIconName;
+  label: string;
+  detail?: string;
+  /** An unread mark on the row, matching the one on the button that opened it. */
+  dot?: boolean;
+  onPress: () => void;
+};
+
+/**
+ * The menu a button opens: it springs out of the corner it was summoned from
+ * and settles, the way iOS 26 menus do. Rendered inline rather than in a modal
+ * so it shares the screen's own glass and never flashes a second window.
+ */
+export function GlassMenu({
+  open,
+  onClose,
+  items,
+  from,
+  style,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: GlassMenuItem[];
+  /** Which corner it grows out of. */
+  from: 'top-right' | 'bottom-left';
+  style?: StyleProp<ViewStyle>;
+}) {
+  const reducedMotion = useReducedMotion();
+  const progress = useRef(new Animated.Value(0)).current;
+  const [mounted, setMounted] = useState(open);
+
+  useEffect(() => {
+    if (open) setMounted(true);
+    Animated.spring(progress, {
+      toValue: open ? 1 : 0,
+      useNativeDriver: true,
+      damping: reducedMotion ? 40 : 17,
+      stiffness: reducedMotion ? 400 : 240,
+      mass: 0.8,
+    }).start(({ finished }) => {
+      if (finished && !open) setMounted(false);
+    });
+  }, [open, progress, reducedMotion]);
+
+  if (!mounted) return null;
+
+  const grow = from === 'top-right' ? 1 : -1;
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
+  // Grows away from its own corner instead of from the middle.
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * 26, 0] });
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * -22, 0] });
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="ปิดเมนู"
+        onPress={onClose}
+        style={{ position: 'absolute', top: -1000, right: -1000, bottom: -1000, left: -1000, zIndex: 8 }}
+      />
+      <Animated.View
+        style={[
+          { position: 'absolute', zIndex: 9, opacity: progress, transform: [{ translateX }, { translateY }, { scale }] },
+          style,
+        ]}
+      >
+        <GlassSurface
+          style={{ borderRadius: 22, paddingVertical: 6, minWidth: 232, overflow: 'hidden' }}
+          fallbackStyle={{
+            backgroundColor: 'rgba(255,255,255,0.97)',
+            borderWidth: 1,
+            borderColor: ai.hairline,
+            shadowColor: '#000',
+            shadowOpacity: 0.16,
+            shadowRadius: 18,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 12,
+          }}
+        >
+          {items.map((item) => (
+            <Pressable
+              key={item.key}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              onPress={() => { onClose(); item.onPress(); }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                minHeight: 48,
+                paddingHorizontal: 16,
+                backgroundColor: pressed ? 'rgba(249,115,22,0.12)' : 'transparent',
+              })}
+            >
+              <AppIcon name={item.icon} size={20} color={ai.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, color: ai.ink }}>{item.label}</Text>
+                {item.detail ? <Text style={{ fontSize: 12, color: ai.faded }}>{item.detail}</Text> : null}
+              </View>
+              {item.dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ai.orange }} /> : null}
+            </Pressable>
+          ))}
+        </GlassSurface>
+      </Animated.View>
+    </>
   );
 }
 
@@ -172,19 +301,42 @@ export function BottomSheet({
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
+  const drag = useRef(new Animated.Value(0)).current;
   const full = heightFraction >= 1;
   const sheetHeight = full ? windowHeight : Math.round(windowHeight * heightFraction);
 
   useEffect(() => {
+    if (open) drag.setValue(0);
     Animated.timing(progress, {
       toValue: open ? 1 : 0,
       duration: reducedMotion ? 0 : open ? 300 : 220,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
       useNativeDriver: true,
     }).start();
-  }, [open, progress, reducedMotion]);
+  }, [drag, open, progress, reducedMotion]);
 
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [sheetHeight, 0] });
+  // Pull the sheet down to put it away, the gesture every iOS sheet has. Only
+  // the strip along the top listens, so a list inside still scrolls normally.
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
+      onPanResponderRelease: (_event, gesture) => {
+        const dismiss = gesture.dy > 90 || gesture.vy > 0.8;
+        if (dismiss) {
+          Animated.timing(drag, { toValue: sheetHeight, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true })
+            .start(() => { onCloseRef.current(); drag.setValue(0); });
+          return;
+        }
+        Animated.spring(drag, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 260 }).start();
+      },
+    }),
+  ).current;
+  // The responder is built once, so it reads the current handler through a ref.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const translateY = Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [sheetHeight, 0] }), drag);
 
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
@@ -209,6 +361,9 @@ export function BottomSheet({
           }}
         >
           {!full ? <View style={{ alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: '#e5e7eb', marginBottom: 6 }} /> : null}
+          {!full ? (
+            <View {...pan.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52, zIndex: 2 }} />
+          ) : null}
           {children}
         </Animated.View>
       </View>

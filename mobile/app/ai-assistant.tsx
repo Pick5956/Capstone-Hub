@@ -38,7 +38,7 @@ import {
 } from '@/src/components/ai/bubbles';
 import { AIChart } from '@/src/components/ai/chart';
 import { ChatListSheet } from '@/src/components/ai/chat-list-sheet';
-import { GlassButton, GlassPill } from '@/src/components/ai/chrome';
+import { GlassButton, GlassMenu, GlassPill } from '@/src/components/ai/chrome';
 import { Composer } from '@/src/components/ai/composer';
 import { ConfirmCard, type ConfirmState } from '@/src/components/ai/confirm-card';
 import { InsightsSheet, insightKey } from '@/src/components/ai/insights-sheet';
@@ -135,6 +135,7 @@ export default function AIAssistantScreen() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [stickToBottom, setStickToBottom] = useState(true);
   const [showJump, setShowJump] = useState(false);
@@ -149,6 +150,14 @@ export default function AIAssistantScreen() {
   const busy = loading || threadLoading;
   // The floating header's height: the status bar plus one button row.
   const headerHeight = insets.top + 42;
+  // Once the owner has asked something the header becomes the chat's own: its
+  // name in the middle, and the four buttons folded into one "…".
+  const started = messages.length > 0 || threadLoading;
+  const firstQuestion = messages.find((message) => message.role === 'user')?.content ?? '';
+  const chatTitle = conversations?.find((row) => row.id === conversationId)?.title
+    || firstQuestion
+    || copy('แชทใหม่', 'New chat');
+  const restaurantName = activeMembership?.restaurant?.name ?? '';
 
   // ---------------------------------------------------------------- loading
 
@@ -302,6 +311,9 @@ export default function AIAssistantScreen() {
         setConversationId(data.conversation_id);
         void writeActiveThread(scope, data.conversation_id);
         conversationsStale.current = true;
+        // The server names the chat on its first answer; read it back so the
+        // header shows that name instead of the raw question.
+        void loadConversations();
       }
       if (data.action_plan) {
         setPendingPlan(data.action_plan);
@@ -359,7 +371,7 @@ export default function AIAssistantScreen() {
         setDraft(null);
       }
     }
-  }, [append, canUseAI, conversationId, copy, hasPermission, history, language, loading, pathname, scope]);
+  }, [append, canUseAI, conversationId, copy, hasPermission, history, language, loadConversations, loading, pathname, scope]);
 
   const onAction = useCallback((action: AIGuidedAction) => {
     if (action.prompt) {
@@ -509,19 +521,59 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingRight: 14, zIndex: 3 }}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
         <GlassButton
           icon="chevron-back"
           label={copy('ย้อนกลับ', 'Back')}
           onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/more' as never); }}
         />
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
-          <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
-          <GlassButton icon="create-outline" label={copy('เริ่มแชทใหม่', 'New chat')} onPress={startNewChat} />
-          <GlassButton icon="settings-outline" label={copy('ตั้งค่า AI', 'AI settings')} onPress={() => setSettingsOpen(true)} />
-        </View>
+        {started ? (
+          <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
+            <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '600', color: ai.ink }}>{chatTitle}</Text>
+            {restaurantName ? (
+              <Text numberOfLines={1} style={{ fontSize: 12, color: ai.faded }}>{restaurantName}</Text>
+            ) : null}
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+        {started ? (
+          <GlassButton
+            icon="ellipsis-horizontal"
+            label={copy('เมนู', 'Menu')}
+            dot={unseenInsights > 0}
+            active={menuOpen}
+            onPress={() => setMenuOpen((current) => !current)}
+          />
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
+            <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
+            <GlassButton icon="create-outline" label={copy('เริ่มแชทใหม่', 'New chat')} onPress={startNewChat} />
+            <GlassButton icon="settings-outline" label={copy('ตั้งค่า AI', 'AI settings')} onPress={() => setSettingsOpen(true)} />
+          </View>
+        )}
       </View>
+
+      <GlassMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        from="top-right"
+        style={{ top: headerHeight + 4, right: 14 }}
+        items={[
+          { key: 'chats', icon: 'chatbubbles-outline', label: copy('รายการแชท', 'Chats'), onPress: () => setListOpen(true) },
+          {
+            key: 'insights',
+            icon: 'notifications-outline',
+            label: copy('ควรรู้วันนี้', "Today's insights"),
+            detail: unseenInsights > 0 ? copy(`${unseenInsights} เรื่องยังไม่ได้อ่าน`, `${unseenInsights} unread`) : undefined,
+            dot: unseenInsights > 0,
+            onPress: () => setInsightsOpen(true),
+          },
+          { key: 'new', icon: 'create-outline', label: copy('เริ่มแชทใหม่', 'New chat'), onPress: startNewChat },
+          { key: 'settings', icon: 'settings-outline', label: copy('ตั้งค่า AI', 'AI settings'), onPress: () => setSettingsOpen(true) },
+        ]}
+      />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: wide ? 760 : undefined }}>

@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { forwardRef, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, TextInput as NativeTextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, TextInput as NativeTextInput, View } from 'react-native';
 
 import { extractReceipt } from '@/src/api/ai';
 import { AppIcon } from '@/src/components/app-icon';
@@ -11,7 +11,7 @@ import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { receiptDraftToCommand } from '@/src/lib/ai-chat';
 import type { DisplayLanguage } from '@/src/lib/display-preferences';
 
-import { GlassSurface } from './chrome';
+import { GlassMenu, GlassSurface, type GlassMenuItem } from './chrome';
 import { ai } from './theme';
 
 // The composer is a capsule while the question fits one line, and grows upward
@@ -37,6 +37,7 @@ export const Composer = forwardRef<NativeTextInput, {
   const [scanning, setScanning] = useState(false);
   const [focused, setFocused] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
+  const [attachOpen, setAttachOpen] = useState(false);
   const t = (th: string, en: string) => (language === 'th' ? th : en);
   const canSend = value.trim().length > 0 && !sending && !disabled;
   const tall = value.length > 0 && contentHeight > ONE_LINE;
@@ -75,30 +76,22 @@ export const Composer = forwardRef<NativeTextInput, {
     }
   };
 
-  const openAttachMenu = () => {
-    if (disabled || scanning) return;
-    const scanLabel = t('สแกนใบเสร็จ', 'Scan a receipt');
-    const cancelLabel = t('ยกเลิก', 'Cancel');
-    const title = t('แนบเข้าคำถาม', 'Add to your question');
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title, options: [scanLabel, cancelLabel], cancelButtonIndex: 1 },
-        (index) => { if (index === 0) void scan(); },
-      );
-      return;
-    }
-    Alert.alert(title, undefined, [
-      { text: scanLabel, onPress: () => { void scan(); } },
-      { text: cancelLabel, style: 'cancel' },
-    ]);
-  };
+  const attachItems: GlassMenuItem[] = [
+    {
+      key: 'scan',
+      icon: 'scan-outline',
+      label: t('สแกนใบเสร็จ', 'Scan a receipt'),
+      detail: t('อ่านยอดจากรูปแล้วเติมให้', 'Reads the total from a photo'),
+      onPress: () => { void scan(); },
+    },
+  ];
 
   const plusButton = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={t('แนบเข้าคำถาม', 'Add to your question')}
       disabled={scanning || disabled}
-      onPress={openAttachMenu}
+      onPress={() => setAttachOpen((current) => !current)}
       style={({ pressed }) => ({
         width: 36,
         height: 36,
@@ -171,8 +164,20 @@ export const Composer = forwardRef<NativeTextInput, {
     elevation: 1,
   };
 
+  const menu = (
+    <GlassMenu
+      open={attachOpen}
+      onClose={() => setAttachOpen(false)}
+      items={attachItems}
+      from="bottom-left"
+      style={{ bottom: '100%', left: 0, marginBottom: 8 }}
+    />
+  );
+
   if (tall) {
     return (
+      <View>
+      {menu}
       <GlassSurface
         style={{ borderRadius: 24, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8, gap: 4, overflow: 'hidden' }}
         fallbackStyle={fallbackStyle}
@@ -185,17 +190,21 @@ export const Composer = forwardRef<NativeTextInput, {
           {sendButton}
         </View>
       </GlassSurface>
+      </View>
     );
   }
 
   return (
-    <GlassSurface
+    <View>
+      {menu}
+      <GlassSurface
       style={{ borderRadius: 999, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 6, gap: 2, overflow: 'hidden' }}
       fallbackStyle={fallbackStyle}
     >
       {plusButton}
       {input}
       {sendButton}
-    </GlassSurface>
+      </GlassSurface>
+    </View>
   );
 });

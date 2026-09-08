@@ -171,15 +171,27 @@ export function AIOrb({
           </RadialGradient>
           {/* The lit edge: bright where the light enters, a fainter bounce opposite. */}
           <LinearGradient id={`edge${uid}`} x1={18} y1={10} x2={82} y2={92} gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.95} />
-            <Stop offset="0.35" stopColor="#ffffff" stopOpacity={0.15} />
-            <Stop offset="0.62" stopColor="#ffffff" stopOpacity={0} />
-            <Stop offset="1" stopColor="#ffffff" stopOpacity={0.35} />
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={1} />
+            <Stop offset="0.3" stopColor="#ffffff" stopOpacity={0.2} />
+            <Stop offset="0.6" stopColor="#ffffff" stopOpacity={0} />
+            <Stop offset="0.88" stopColor="#ffffff" stopOpacity={0.22} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0.5} />
           </LinearGradient>
+          {/* The wall of the glass, lit from where the light enters: a soft sheen
+              set in from the edge, blurred so it reads as thickness, not a line. */}
+          <LinearGradient id={`wall${uid}`} x1={20} y1={12} x2={70} y2={70} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.75} />
+            <Stop offset="0.55" stopColor="#ffffff" stopOpacity={0.08} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+          </LinearGradient>
+          <Filter id={`soft${uid}`} x="-20%" y="-20%" width="140%" height="140%">
+            <FeGaussianBlur stdDeviation={1.6} />
+          </Filter>
         </Defs>
         <Rect x={0} y={0} width={100} height={100} fill={`url(#shade${uid})`} />
         <Rect x={0} y={0} width={100} height={100} fill={`url(#rim${uid})`} />
-        <Circle cx={50} cy={50} r={49} fill="none" stroke={`url(#edge${uid})`} strokeWidth={1.6} />
+        <Circle cx={50} cy={50} r={45} fill="none" stroke={`url(#wall${uid})`} strokeWidth={5} filter={`url(#soft${uid})`} />
+        <Circle cx={50} cy={50} r={49} fill="none" stroke={`url(#edge${uid})`} strokeWidth={1.7} />
       </Svg>
     </View>
   );
