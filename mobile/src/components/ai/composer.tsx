@@ -22,7 +22,7 @@ import { ai } from './theme';
 // Voice dictation from the web is left out: Expo Go has no speech-to-text.
 
 /** One line of text plus its padding; above this the capsule becomes a box. */
-const ONE_LINE = 30;
+const ONE_LINE = 46;
 
 export const Composer = forwardRef<NativeTextInput, {
   value: string;
@@ -93,9 +93,9 @@ export const Composer = forwardRef<NativeTextInput, {
       disabled={scanning || disabled}
       onPress={() => setAttachOpen((current) => !current)}
       style={({ pressed }) => ({
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 42,
+        height: 42,
+        borderRadius: 21,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed || scanning ? ai.orangeSoft : 'transparent',
@@ -118,9 +118,9 @@ export const Composer = forwardRef<NativeTextInput, {
         colors={[ai.orange, ai.amber]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', shadowColor: ai.orange, shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }}
+        style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', shadowColor: ai.orange, shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }}
       >
-        {sending ? <ActivityIndicator size="small" color="#ffffff" /> : <AppIcon name="arrow-up" size={20} color="#ffffff" />}
+        {sending ? <ActivityIndicator size="small" color="#ffffff" /> : <AppIcon name="arrow-up" size={22} color="#ffffff" />}
       </LinearGradient>
     </Pressable>
   );
@@ -141,12 +141,12 @@ export const Composer = forwardRef<NativeTextInput, {
       placeholderTextColor={ai.faint}
       style={{
         flex: tall ? undefined : 1,
-        minHeight: 36,
-        maxHeight: 132,
-        paddingHorizontal: 8,
-        paddingVertical: 7,
-        fontSize: 15,
-        lineHeight: 22,
+        minHeight: 42,
+        maxHeight: 150,
+        paddingHorizontal: 10,
+        paddingVertical: 9,
+        fontSize: 16,
+        lineHeight: 24,
         color: ai.ink,
         textAlignVertical: tall ? 'top' : 'center',
       }}
@@ -179,7 +179,7 @@ export const Composer = forwardRef<NativeTextInput, {
       <View>
       {menu}
       <GlassSurface
-        style={{ borderRadius: 24, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8, gap: 4, overflow: 'hidden' }}
+        style={{ borderRadius: 28, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 9, gap: 4, overflow: 'hidden' }}
         fallbackStyle={fallbackStyle}
       >
         {input}
@@ -198,7 +198,7 @@ export const Composer = forwardRef<NativeTextInput, {
     <View>
       {menu}
       <GlassSurface
-      style={{ borderRadius: 999, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 6, gap: 2, overflow: 'hidden' }}
+      style={{ borderRadius: 999, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8, gap: 3, overflow: 'hidden' }}
       fallbackStyle={fallbackStyle}
     >
       {plusButton}

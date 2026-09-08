@@ -336,14 +336,24 @@ export function BottomSheet({
   const full = heightFraction >= 1;
   const sheetHeight = full ? windowHeight : Math.round(windowHeight * heightFraction);
 
+  const [shown, setShown] = useState(open);
+
   useEffect(() => {
-    if (open) drag.setValue(0);
+    if (open) {
+      drag.setValue(0);
+      setShown(true);
+    }
     Animated.timing(progress, {
       toValue: open ? 1 : 0,
-      duration: reducedMotion ? 0 : open ? 300 : 220,
+      duration: reducedMotion ? 0 : open ? 300 : 240,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
       useNativeDriver: false,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished && !open) {
+        setShown(false);
+        drag.setValue(0);
+      }
+    });
   }, [drag, open, progress, reducedMotion]);
 
   // Pull the sheet down to put it away, the gesture every iOS sheet has. Only
@@ -357,7 +367,9 @@ export function BottomSheet({
         const dismiss = gesture.dy > 90 || gesture.vy > 0.8;
         if (dismiss) {
           Animated.timing(drag, { toValue: sheetHeight, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false })
-            .start(() => { onCloseRef.current(); drag.setValue(0); });
+            // The close animation resets the drag once it is off screen; doing it
+            // here would show the sheet again for a frame on its way out.
+            .start(() => onCloseRef.current());
           return;
         }
         Animated.spring(drag, { toValue: 0, useNativeDriver: false, damping: 20, stiffness: 260 }).start();
@@ -371,7 +383,7 @@ export function BottomSheet({
   const translateY = Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [sheetHeight, 0] }), drag);
 
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={shown} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.3)', opacity: progress }}>
           <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onClose} style={{ flex: 1 }} />
