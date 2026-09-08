@@ -1,3 +1,4 @@
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Pressable, View, useWindowDimensions } from 'react-native';
@@ -9,10 +10,16 @@ import { useReducedMotion } from '@/src/components/motion';
 
 import { ai } from './theme';
 
-// Small chrome shared by the assistant screen: the 32px glass circles in the
-// top-right cluster (the web's rounded-full border bg-white/80 backdrop-blur
-// buttons), their gradient badge, and the bottom sheet the insights and the
-// chat list slide up in.
+// Small chrome shared by the assistant screen: the round buttons in the top
+// row, their gradient badge, and the bottom sheet the insights and the chat
+// list slide up in.
+//
+// On iOS 26 the buttons are real Liquid Glass, the system material Apple's own
+// apps use — it refracts and reacts to what scrolls under it. Everywhere else
+// (older iOS, every Android) the same button falls back to the frosted white
+// circle the web page uses, which is why this is one component and not two:
+// the screen never asks which platform it is on.
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 export function GlassButton({
   icon,
@@ -20,7 +27,7 @@ export function GlassButton({
   onPress,
   badge,
   active,
-  size = 32,
+  size = 34,
 }: {
   icon: AppIconName;
   label: string;
@@ -29,30 +36,52 @@ export function GlassButton({
   active?: boolean;
   size?: number;
 }) {
+  const icon_ = <AppIcon name={icon} size={size * 0.46} color={active ? ai.deep : ai.muted} />;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label} ${badge}` : label}
-      hitSlop={6}
+      hitSlop={8}
       onPress={onPress}
       style={({ pressed }) => ({
         width: size,
         height: size,
-        borderRadius: size / 2,
-        borderWidth: 1,
-        borderColor: active ? '#fdba74' : ai.hairline,
-        backgroundColor: 'rgba(255,255,255,0.85)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: pressed ? 0.12 : 0.06,
-        shadowRadius: pressed ? 4 : 2,
-        shadowOffset: { width: 0, height: 1 },
-        elevation: 1,
         transform: [{ translateY: pressed ? -1 : 0 }],
+        opacity: pressed && LIQUID_GLASS ? 0.85 : 1,
       })}
     >
-      <AppIcon name={icon} size={size * 0.47} color={active ? ai.deep : ai.muted} />
+      {LIQUID_GLASS ? (
+        <GlassView
+          glassEffectStyle="regular"
+          isInteractive
+          // The screen is light-only, so the glass must not follow a dark system theme.
+          colorScheme="light"
+          tintColor={active ? 'rgba(249,115,22,0.18)' : undefined}
+          style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
+        >
+          {icon_}
+        </GlassView>
+      ) : (
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 1,
+            borderColor: active ? '#fdba74' : ai.hairline,
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.06,
+            shadowRadius: 2,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 1,
+          }}
+        >
+          {icon_}
+        </View>
+      )}
       {badge ? (
         <LinearGradient
           colors={[ai.orange, ai.amber]}
@@ -75,6 +104,25 @@ export function GlassButton({
           <Text style={{ fontSize: 9, lineHeight: 12, fontWeight: '700', color: '#ffffff' }}>{badge > 9 ? '9+' : badge}</Text>
         </LinearGradient>
       ) : null}
+    </Pressable>
+  );
+}
+
+/** The same material as a capsule, for the suggested-question chips. */
+export function GlassPill({ label, onPress }: { label: string; onPress: () => void }) {
+  const text = (
+    <Text style={{ fontSize: 12.5, fontWeight: '500', color: ai.body }}>{label}</Text>
+  );
+  const box = { minHeight: 36, justifyContent: 'center' as const, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 };
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+      {LIQUID_GLASS ? (
+        <GlassView glassEffectStyle="regular" isInteractive colorScheme="light" style={box}>
+          {text}
+        </GlassView>
+      ) : (
+        <View style={{ ...box, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: 'rgba(255,255,255,0.7)' }}>{text}</View>
+      )}
     </Pressable>
   );
 }

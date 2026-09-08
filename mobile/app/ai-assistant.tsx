@@ -38,7 +38,7 @@ import {
 } from '@/src/components/ai/bubbles';
 import { AIChart } from '@/src/components/ai/chart';
 import { ChatListSheet } from '@/src/components/ai/chat-list-sheet';
-import { GlassButton } from '@/src/components/ai/chrome';
+import { GlassButton, GlassPill } from '@/src/components/ai/chrome';
 import { Composer } from '@/src/components/ai/composer';
 import { ConfirmCard, type ConfirmState } from '@/src/components/ai/confirm-card';
 import { InsightsSheet, insightKey } from '@/src/components/ai/insights-sheet';
@@ -507,16 +507,11 @@ export default function AIAssistantScreen() {
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
       <View style={{ paddingTop: insets.top, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingRight: 14, zIndex: 3 }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={copy('ย้อนกลับ', 'Back')}
+        <GlassButton
+          icon="chevron-back"
+          label={copy('ย้อนกลับ', 'Back')}
           onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/more' as never); }}
-          hitSlop={8}
-          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', height: 44, paddingRight: 8, opacity: pressed ? 0.6 : 1 })}
-        >
-          <AppIcon name="chevron-back" size={24} color={ai.deep} />
-          <Text style={{ fontSize: 14, fontWeight: '500', color: ai.deep }}>{copy('ระบบทั้งหมด', 'All tools')}</Text>
-        </Pressable>
+        />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
           <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
@@ -585,14 +580,14 @@ export default function AIAssistantScreen() {
                 ) : null}
               </ScrollView>
               {showJump ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={copy('ไปที่ข้อความล่าสุด', 'Jump to latest')}
-                  onPress={() => { setStickToBottom(true); scrollRef.current?.scrollToEnd({ animated: true }); }}
-                  style={{ position: 'absolute', bottom: 8, alignSelf: 'center', width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: ai.hairline, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 }}
-                >
-                  <AppIcon name="chevron-down" size={18} color={ai.muted} />
-                </Pressable>
+                <View style={{ position: 'absolute', bottom: 8, alignSelf: 'center' }}>
+                  <GlassButton
+                    icon="chevron-down"
+                    label={copy('ไปที่ข้อความล่าสุด', 'Jump to latest')}
+                    onPress={() => { setStickToBottom(true); scrollRef.current?.scrollToEnd({ animated: true }); }}
+                    size={36}
+                  />
+                </View>
               ) : null}
             </View>
           )}
@@ -608,14 +603,7 @@ export default function AIAssistantScreen() {
             {empty ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingHorizontal: 6, paddingBottom: 2 }}>
                 {suggestions.map((suggestion) => (
-                  <Pressable
-                    key={suggestion}
-                    accessibilityRole="button"
-                    onPress={() => { void ask(suggestion); }}
-                    style={({ pressed }) => ({ minHeight: 36, justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: pressed ? '#fdba74' : '#e5e7eb', backgroundColor: 'rgba(255,255,255,0.7)', paddingHorizontal: 14, paddingVertical: 7 })}
-                  >
-                    <Text style={{ fontSize: 12.5, fontWeight: '500', color: ai.body }}>{suggestion}</Text>
-                  </Pressable>
+                  <GlassPill key={suggestion} label={suggestion} onPress={() => { void ask(suggestion); }} />
                 ))}
               </View>
             ) : null}
