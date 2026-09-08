@@ -149,7 +149,10 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <StatusBar style="dark" backgroundColor={colors.surface} />
+      {/* SDK 57 removed backgroundColor from StatusBar: Android draws
+          edge-to-edge, so the bar is transparent and the view behind it shows
+          through. The wrapping View already paints colors.surface there. */}
+      <StatusBar style="dark" />
       <SafeAreaProvider>
         <DisplayPreferencesProvider>
           <ToastProvider>

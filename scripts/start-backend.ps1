@@ -16,96 +16,24 @@ $backendDir = Join-Path (Split-Path -Parent $PSScriptRoot) "backend"
 $logs = New-RuntimeLogStream -Producer "backend" -RunName $Mode
 $go = (Get-Command go -ErrorAction Stop).Source
 
-function Invoke-LoggedNativeProcess {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$FilePath,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Arguments,
-
-    [Parameter(Mandatory = $true)]
-    [string]$StdoutPath,
-
-    [Parameter(Mandatory = $true)]
-    [string]$StderrPath
-  )
-
-  $stdoutStream = $null
-  $stderrStream = $null
-  $process = $null
-  try {
-    $stdoutStream = [System.IO.File]::Open(
-      $StdoutPath,
-      [System.IO.FileMode]::Append,
-      [System.IO.FileAccess]::Write,
-      [System.IO.FileShare]::ReadWrite
-    )
-    $stderrStream = [System.IO.File]::Open(
-      $StderrPath,
-      [System.IO.FileMode]::Append,
-      [System.IO.FileAccess]::Write,
-      [System.IO.FileShare]::ReadWrite
-    )
-
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $FilePath
-    $startInfo.Arguments = $Arguments
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.WorkingDirectory = $backendDir
-
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $startInfo
-    if (-not $process.Start()) {
-      throw "Backend process could not be started."
-    }
-
-    $stdoutCopy = $process.StandardOutput.BaseStream.CopyToAsync($stdoutStream)
-    $stderrCopy = $process.StandardError.BaseStream.CopyToAsync($stderrStream)
-    $process.WaitForExit()
-    $stdoutCopy.GetAwaiter().GetResult() | Out-Null
-    $stderrCopy.GetAwaiter().GetResult() | Out-Null
-    return $process.ExitCode
-  } finally {
-    if ($process) {
-      if (-not $process.HasExited) {
-        try {
-          $process.Kill()
-          $process.WaitForExit()
-        } catch {
-          # Preserve the original interruption/error while still attempting cleanup.
-        }
-      }
-      $process.Dispose()
-    }
-    if ($stdoutStream) {
-      $stdoutStream.Dispose()
-    }
-    if ($stderrStream) {
-      $stderrStream.Dispose()
-    }
-  }
-}
-
 if ($Mode -eq "public") {
   $env:PUBLIC_BACKEND_URL = "https://api.dishy.pro"
 
-  # DISHY-03: serve the public backend in Gin *release* mode, not debug. In
-  # release mode the app intentionally skips auto-loading backend/.env, so load
-  # that file into the process environment first, then pin GIN_MODE=release.
-  # This also collapses CORS to the configured allow-list (no debug dev-origin
-  # wildcard).
-  $backendEnvFile = Join-Path $backendDir ".env"
-  if (Test-Path $backendEnvFile) {
-    Get-Content $backendEnvFile | ForEach-Object {
-      $line = $_.Trim()
-      if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
-      $pair = $line.Split("=", 2)
-      [Environment]::SetEnvironmentVariable($pair[0].Trim(), $pair[1].Trim(), "Process")
-    }
-  }
+  # DISHY-03: serve the public backend in Gin *release* mode, not debug. That
+  # collapses CORS to the configured allow-list (no debug dev-origin wildcard).
+  #
+  # Release skips backend/.env, so opt back in with LOAD_DOTENV and let godotenv
+  # - the same parser local dev uses - do the reading. This script used to parse
+  # the file itself, splitting each line on the first `=`. It was wrong in two
+  # ways that only ever broke the public run:
+  #   * lines with no `=` were skipped, and those are the body of the multi-line
+  #     quoted GROQ_API_KEYS / GEMINI_API_KEYS blocks, so each key list arrived
+  #     as nothing but its opening quote and every AI call came back 401;
+  #   * inline `# ...` comments were kept, so GROQ_MODEL and GEMINI_MODEL carried
+  #     their notes into the model name and Gemini answered 404 "model no longer
+  #     exists".
+  # Do not reintroduce a hand-rolled parser here.
+  $env:LOAD_DOTENV = "1"
   $env:GIN_MODE = "release"
 }
 

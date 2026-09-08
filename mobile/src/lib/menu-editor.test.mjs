@@ -716,7 +716,11 @@ test('Expo declares the native photo-library permission plugin used by the menu 
 test('native image workflow dependencies stay declared explicitly', () => {
   const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
-  assert.match(manifest.dependencies['expo-image-picker'], /^~17\./);
-  assert.match(manifest.dependencies['expo-image-manipulator'], /^~14\./);
-  assert.match(manifest.dependencies['react-native-view-shot'], /^4\./);
+  // From SDK 57 the Expo packages track the SDK number rather than their own
+  // major, so these read ~57 where they used to read ~17 and ~14. The point of
+  // the test is unchanged: the cropper needs all three declared, and a major
+  // move should be a deliberate edit here rather than a silent bump.
+  assert.match(manifest.dependencies['expo-image-picker'], /^~57\./);
+  assert.match(manifest.dependencies['expo-image-manipulator'], /^~57\./);
+  assert.match(manifest.dependencies['react-native-view-shot'], /^5\./);
 });

@@ -50,7 +50,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true
@@ -58,7 +59,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "dbcdb837-2cff-44e4-8b87-f628c77eb8b5"
+        "projectId": "8bcb07d4-1e03-4efb-a214-8b7cc43a5c60"
       }
     }
   }

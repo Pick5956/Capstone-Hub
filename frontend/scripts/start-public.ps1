@@ -39,8 +39,18 @@ Write-Host "Logs: $($logs.Stdout) and $($logs.Stderr)"
 Set-Location $frontendDir
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $nextCli = Join-Path $frontendDir "node_modules\next\dist\bin\next"
-& $node $nextCli start --hostname 0.0.0.0 1>> $logs.Stdout 2>> $logs.Stderr
-$exitCode = $LASTEXITCODE
+# Deliberately not `& $node ... 1>> out 2>> err`. Under
+# $ErrorActionPreference = "Stop" PowerShell 5.1 turns every stderr line from a
+# native program into a terminating NativeCommandError, so one routine Next
+# message - an internal NoFallbackError while correctly answering a 404 - killed
+# this script and took the public site down with it.
+# Invoke-LoggedNativeProcess (scripts/runtime-logging.ps1) captures both streams
+# without PowerShell interpreting either as an error.
+$exitCode = Invoke-LoggedNativeProcess `
+  -FilePath $node `
+  -Arguments "`"$nextCli`" start --hostname 0.0.0.0" `
+  -StdoutPath $logs.Stdout `
+  -StderrPath $logs.Stderr
 
 if ($exitCode -ne 0) {
   Write-Error "Public frontend exited with code $exitCode. Check $($logs.Stderr)."

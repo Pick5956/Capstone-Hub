@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   landscapeImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
     backgroundColor: 'transparent',

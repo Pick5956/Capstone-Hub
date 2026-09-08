@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
   classifyHorizontalSwipe,
   getAdjacentNavigationTarget,
   getNavigationIndexByRouteName,
+  getNavigationRouteName,
   getPagerSceneTranslateXFromPosition,
   isPagerSwipeCooldownActive,
   notePagerVerticalScrollActivity,
@@ -681,6 +683,39 @@ test('the tab navigator route name is the canonical navigation index', () => {
   assert.equal(getNavigationIndexByRouteName(permittedItems, null), -1);
 });
 
+// The tab bar dispatches JUMP_TO by route name. It used to send item.key, which
+// is only the same string by coincidence: "pos" is served by tables.tsx, so the
+// navigator was asked for a route it does not have and answered "The action
+// 'JUMP_TO' with payload {"name":"pos"} was not handled by any navigator" while
+// the tab stayed put.
+test('the JUMP_TO route name is the file behind the tab, not the tab key', () => {
+  assert.equal(getNavigationRouteName({ key: 'home', href: '/home' }), 'home');
+  assert.equal(getNavigationRouteName({ key: 'pos', href: '/tables' }), 'tables');
+  assert.equal(getNavigationRouteName({ key: 'more', href: '/more/' }), 'more');
+});
+
+// The real guard: whatever name the tab bar dispatches has to resolve back to
+// the same tab. This fails for any future item whose key and href disagree, not
+// just the one that broke.
+test('every tab dispatches a name that resolves back to itself', () => {
+  const permittedItems = [
+    { key: 'home', href: '/home' },
+    { key: 'pos', href: '/tables' },
+    { key: 'kitchen', href: '/kitchen' },
+    { key: 'orders', href: '/orders' },
+    { key: 'more', href: '/more' },
+  ];
+
+  permittedItems.forEach((item, index) => {
+    const dispatched = getNavigationRouteName(item);
+    assert.equal(
+      getNavigationIndexByRouteName(permittedItems, dispatched),
+      index,
+      `tab ${item.key} dispatches ${dispatched}, which does not resolve back to it`,
+    );
+  });
+});
+
 test('absolute pager position keeps the target scene fixed across route synchronization', () => {
   assert.equal(getPagerSceneTranslateXFromPosition(1, 1, 360), 0);
   assert.equal(getPagerSceneTranslateXFromPosition(2, 1, 360), 360);
@@ -696,5 +731,30 @@ test('absolute pager position safely rejects invalid geometry', () => {
   assert.equal(
     getPagerSceneTranslateXFromPosition(Number.POSITIVE_INFINITY, 1, 360),
     0,
+  );
+});
+
+// The unit tests above prove the helper is right; this one proves the tab bar
+// actually calls it. The bug was not in a function - it was one call site
+// passing target.key where a route name belongs, which every pure-logic test in
+// this file would happily stay green through.
+test('the tab bar dispatches JUMP_TO through getNavigationRouteName', async () => {
+  const layout = await readFile(
+    new URL('../../app/(primary)/_layout.tsx', import.meta.url),
+    'utf8',
+  );
+
+  const dispatch = layout.slice(layout.indexOf("type: 'JUMP_TO'"));
+  const payload = dispatch.slice(0, dispatch.indexOf('}'));
+
+  assert.match(
+    payload,
+    /name: getNavigationRouteName\(/,
+    'JUMP_TO must carry the route name from getNavigationRouteName',
+  );
+  assert.doesNotMatch(
+    payload,
+    /name: \w+\.key/,
+    'dispatching an item key asks for a route the navigator does not have',
   );
 });

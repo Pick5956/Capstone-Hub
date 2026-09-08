@@ -20,8 +20,29 @@ var allowedDatabaseSSLModes = map[string]struct{}{
 	"verify-full": {},
 }
 
+// LoadRuntimeEnvironment reads backend/.env into the process environment.
+//
+// Release mode skips it by default: a container takes its values from the
+// orchestrator, and a .env that happened to be baked into the image would
+// silently outrank them.
+//
+// A public run from a developer machine is the other case - release mode is
+// wanted for CORS and logging, but the values still live in backend/.env.
+// LOAD_DOTENV=1 opts back in for exactly that.
+//
+// It matters that godotenv does the reading. The file uses inline `#` comments
+// and multi-line quoted values, and start-backend.ps1 used to parse it in
+// PowerShell by splitting each line on the first `=`. That skipped every line
+// without an `=` - which is the body of the quoted GROQ_API_KEYS and
+// GEMINI_API_KEYS blocks, leaving each key list as its opening quote - and kept
+// the trailing comment as part of GROQ_MODEL and GEMINI_MODEL. The public
+// assistant answered "cannot connect" with a 401 from Groq and a 404 from
+// Gemini while local dev, which already used godotenv, worked.
+//
+// godotenv.Load never overwrites a variable already present in the process, so
+// GIN_MODE and PUBLIC_BACKEND_URL set by the caller still win.
 func LoadRuntimeEnvironment() error {
-	if os.Getenv("GIN_MODE") == ginReleaseMode {
+	if os.Getenv("GIN_MODE") == ginReleaseMode && os.Getenv("LOAD_DOTENV") != "1" {
 		return nil
 	}
 	if err := godotenv.Load(); err != nil {
