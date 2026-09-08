@@ -7,6 +7,7 @@
     "@finan-me/react-native-thermal-printer": "^1.0.9",
     "@react-native-masked-view/masked-view": "0.3.2",
     "expo": "~57.0.20",
+    "expo-audio": "~57.0.4",
     "expo-constants": "~57.0.17",
     "expo-dev-client": "~57.0.18",
     "expo-file-system": "~57.0.6",

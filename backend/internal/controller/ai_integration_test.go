@@ -77,6 +77,11 @@ func (f *fakeAIOperationsService) ExtractReceiptForOwner(actor service.AIActorCo
 	return nil, f.askErr
 }
 
+func (f *fakeAIOperationsService) TranscribeForOwner(actor service.AIActorContext, _ string, _ string, _ string) (string, error) {
+	f.actor = actor
+	return "", f.askErr
+}
+
 func (f *fakeAIOperationsService) AIActionsSettingForOwner(uint) (service.AIActionsSettingView, error) {
 	return service.AIActionsSettingView{}, f.askErr
 }
