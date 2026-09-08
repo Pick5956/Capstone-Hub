@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Defs, FeGaussianBlur, Filter, G, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, FeGaussianBlur, Filter, G, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useReducedMotion } from '@/src/components/motion';
 
@@ -164,8 +164,22 @@ export function AIOrb({
             <Stop offset="0.9" stopColor={GROUND} stopOpacity={0} />
             <Stop offset="1" stopColor={GROUND} stopOpacity={0.35} />
           </RadialGradient>
+          {/* Away from the light, the far side of the glass darkens. */}
+          <RadialGradient id={`shade${uid}`} cx={72} cy={76} r={46} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor="#B03A1A" stopOpacity={0.3} />
+            <Stop offset="1" stopColor="#B03A1A" stopOpacity={0} />
+          </RadialGradient>
+          {/* The lit edge: bright where the light enters, a fainter bounce opposite. */}
+          <LinearGradient id={`edge${uid}`} x1={18} y1={10} x2={82} y2={92} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={0.95} />
+            <Stop offset="0.35" stopColor="#ffffff" stopOpacity={0.15} />
+            <Stop offset="0.62" stopColor="#ffffff" stopOpacity={0} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0.35} />
+          </LinearGradient>
         </Defs>
+        <Rect x={0} y={0} width={100} height={100} fill={`url(#shade${uid})`} />
         <Rect x={0} y={0} width={100} height={100} fill={`url(#rim${uid})`} />
+        <Circle cx={50} cy={50} r={49} fill="none" stroke={`url(#edge${uid})`} strokeWidth={1.6} />
       </Svg>
     </View>
   );
