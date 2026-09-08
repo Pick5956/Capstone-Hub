@@ -753,7 +753,6 @@ export default function AIAssistantScreen() {
         insights={insights}
         loading={insightsLoading}
         language={language}
-        onAsk={(question) => { void ask(question); }}
       />
       <ChatListSheet
         open={listOpen}

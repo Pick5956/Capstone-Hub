@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
@@ -8,9 +9,12 @@ import type { AIInsight } from '@/src/types/ai';
 import { BottomSheet } from './chrome';
 import { ai } from './theme';
 
-// "ควรรู้วันนี้": the proactive cards, a port of the web's AIInsightsPanel as a
-// half-height sheet. Tone is carried by a word label and an icon tile, never by
-// colour alone. Tapping a card closes the sheet and asks about it.
+// "ควรรู้วันนี้": the proactive cards, a port of the web's AIInsightsPanel.
+// Tone is carried by a word label and an icon tile, never by colour alone.
+//
+// A card that stands for several things — nineteen ingredients to reorder —
+// opens to list them, exactly as it does on the web. Tapping a card does
+// nothing else: it never sends a question on the owner's behalf.
 
 export function insightKey(insight: AIInsight): string {
   return `${insight.kind}|${insight.title}|${insight.metric}`;
@@ -34,46 +38,27 @@ function iconFor(kind: string): AppIconName {
   }
 }
 
-function questionFor(insight: AIInsight, language: DisplayLanguage): string {
-  const name = insight.items?.[0]?.name || insight.title;
-  if (language === 'th') {
-    switch (insight.kind) {
-      case 'ingredient_low': return `${name} เหลือเท่าไหร่ ควรสั่งเพิ่มเท่าไหร่`;
-      case 'dead_stock': return `${name} ค้างสต๊อกนานแค่ไหน ควรทำยังไง`;
-      case 'sales_drop': return 'ทำไมยอดขายวันนี้ต่ำกว่าปกติ';
-      case 'sales_up': return 'วันนี้ขายดีเพราะอะไร เมนูไหนขายดี';
-      case 'plowhorse': return `${name} ขายดีแต่กำไรต่ำ ควรปรับราคาไหม`;
-      default: return `${insight.title} หมายความว่ายังไง`;
-    }
-  }
-  switch (insight.kind) {
-    case 'ingredient_low': return `How much ${name} is left and how much should I reorder?`;
-    case 'dead_stock': return `How long has ${name} been sitting in stock and what should I do?`;
-    case 'sales_drop': return 'Why are sales lower than usual today?';
-    case 'sales_up': return 'Why are sales up today and which items are selling?';
-    case 'plowhorse': return `${name} sells well but has a low margin, should I reprice it?`;
-    default: return `What does "${insight.title}" mean?`;
-  }
-}
-
 export function InsightsSheet({
   open,
   onClose,
   insights,
   loading,
   language,
-  onAsk,
 }: {
   open: boolean;
   onClose: () => void;
   insights: AIInsight[] | null;
   loading: boolean;
   language: DisplayLanguage;
-  onAsk: (question: string) => void;
 }) {
   const t = (th: string, en: string) => (language === 'th' ? th : en);
+  const [opened, setOpened] = useState<string[]>([]);
   const urgent = insights?.filter((insight) => insight.severity === 'critical').length ?? 0;
   const count = insights?.length ?? 0;
+
+  useEffect(() => {
+    if (!open) setOpened([]);
+  }, [open]);
 
   return (
     <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')} showClose>
@@ -87,7 +72,7 @@ export function InsightsSheet({
           </Text>
         ) : null}
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 10 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 28, gap: 10 }} keyboardShouldPersistTaps="handled">
         {loading && !insights ? (
           <Text style={{ fontSize: 13, color: ai.faint, paddingVertical: 12 }}>{t('กำลังตรวจข้อมูลร้าน', 'Checking the shop')}</Text>
         ) : count === 0 ? (
@@ -101,12 +86,13 @@ export function InsightsSheet({
           insights?.map((insight) => {
             const tone = toneFor(insight.severity, insight.kind);
             const label = language === 'th' ? tone.label : tone.labelEn;
-            return (
-              <Pressable
-                key={insightKey(insight)}
-                accessibilityRole="button"
-                onPress={() => { onClose(); onAsk(questionFor(insight, language)); }}
-                style={({ pressed }) => ({
+            const key = insightKey(insight);
+            const items = insight.items ?? [];
+            const canOpen = items.length > 1;
+            const isOpen = opened.includes(key);
+            const card = (
+              <View
+                style={{
                   flexDirection: 'row',
                   gap: 10,
                   borderRadius: 16,
@@ -114,8 +100,7 @@ export function InsightsSheet({
                   backgroundColor: tone.bg,
                   borderWidth: 1,
                   borderColor: tone.ring,
-                  opacity: pressed ? 0.8 : 1,
-                })}
+                }}
               >
                 <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: tone.chip, alignItems: 'center', justifyContent: 'center' }}>
                   <AppIcon name={iconFor(insight.kind)} size={18} color={tone.fg} />
@@ -131,20 +116,58 @@ export function InsightsSheet({
                     {insight.metric ? <Text style={{ fontWeight: '600', color: tone.fg === ai.neutral.fg ? ai.body : tone.fg, fontVariant: ['tabular-nums'] }}>{insight.metric} </Text> : null}
                     {insight.detail}
                   </Text>
-                  {insight.items && insight.items.length > 1 ? (
+
+                  {canOpen && !isOpen ? (
                     <Text style={{ fontSize: 12, color: ai.faded, marginTop: 3 }} numberOfLines={2}>
-                      {insight.items.map((item) => item.name).join(' · ')}
+                      {items.map((item) => item.name).join(' · ')}
                       {insight.more ? t(` · อีก ${insight.more} อย่าง`, ` · ${insight.more} more`) : ''}
                     </Text>
                   ) : null}
+
+                  {canOpen && isOpen ? (
+                    <View style={{ marginTop: 8, gap: 7 }}>
+                      {items.map((item) => (
+                        <View key={item.title} style={{ borderTopWidth: 1, borderTopColor: tone.ring, paddingTop: 7 }}>
+                          <Text style={{ fontSize: 13, lineHeight: 18, fontWeight: '600', color: ai.body }}>{item.title}</Text>
+                          {item.detail ? (
+                            <Text style={{ fontSize: 12, lineHeight: 17, color: ai.faded, fontVariant: ['tabular-nums'] }}>{item.detail}</Text>
+                          ) : null}
+                        </View>
+                      ))}
+                      {insight.more ? (
+                        <Text style={{ fontSize: 12, color: ai.faded }}>
+                          {t(`ยังมีอีก ${insight.more} อย่างที่ไม่ได้แสดง`, `${insight.more} more not listed`)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {canOpen ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                      <Text style={{ fontSize: 12.5, fontWeight: '600', color: tone.fg }}>
+                        {isOpen ? t('ย่อรายการ', 'Show less') : t('ดูรายการทั้งหมด', 'See all')}
+                      </Text>
+                      <AppIcon name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color={tone.fg} />
+                    </View>
+                  ) : null}
                 </View>
+              </View>
+            );
+
+            if (!canOpen) return <View key={key}>{card}</View>;
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="button"
+                accessibilityLabel={isOpen ? t('ย่อรายการ', 'Show less') : t('ดูรายการทั้งหมด', 'See all')}
+                onPress={() => setOpened((current) => (current.includes(key) ? current.filter((one) => one !== key) : [...current, key]))}
+                style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+              >
+                {card}
               </Pressable>
             );
           })
         )}
-        {count > 0 ? (
-          <Text style={{ alignSelf: 'center', fontSize: 12, color: ai.faded, marginTop: 2 }}>{t('แตะการ์ดเพื่อถามผู้ช่วยเรื่องนั้น', 'Tap a card to ask about it')}</Text>
-        ) : null}
       </ScrollView>
     </BottomSheet>
   );
