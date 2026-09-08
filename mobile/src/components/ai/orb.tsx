@@ -89,25 +89,30 @@ export function AIOrb({
 }) {
   const reducedMotion = useReducedMotion();
   const spin = useRef(new Animated.Value(0)).current;
+  const drift = useRef(new Animated.Value(0)).current;
+  const sweep = useRef(new Animated.Value(0)).current;
   const uid = useRef(Math.random().toString(36).slice(2, 8)).current;
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        // Reduced motion keeps it alive but slower, as the web does.
-        duration: (reducedMotion ? speed * 1.6 : speed) * 1000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reducedMotion, speed, spin]);
+    const slow = reducedMotion ? 1.6 : 1;
+    const turn = (value: Animated.Value, seconds: number) =>
+      Animated.loop(
+        Animated.timing(value, {
+          toValue: 1,
+          duration: seconds * slow * 1000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      );
+    // Three clocks, each running a whole turn, so no cycle ever ends on a jump.
+    const loops = [turn(spin, speed), turn(drift, speed * 2.6), turn(sweep, speed * 0.55)];
+    loops.forEach((loop) => loop.start());
+    return () => loops.forEach((loop) => loop.stop());
+  }, [drift, reducedMotion, speed, spin, sweep]);
 
   const blur = size < 50 ? 1 : 2;
-  // Half speed, so the bright side wanders rather than chases the colour layers.
-  const coreDrift = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const coreDrift = drift.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const lightSweep = sweep.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
     <View
@@ -153,6 +158,33 @@ export function AIOrb({
             </RadialGradient>
           </Defs>
           <Rect x={-25} y={-25} width={150} height={150} fill={`url(#core${uid})`} />
+        </Svg>
+      </Animated.View>
+
+      {/* Light on the glass: a bright streak travelling around the wall, with a
+          warm pool where it comes out the other side. This is the part that reads
+          as a lens rather than a disc. */}
+      <Animated.View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, width: size, height: size, transform: [{ rotate: lightSweep }] }}
+      >
+        <Svg width="100%" height="100%" viewBox="0 0 100 100">
+          <Defs>
+            <LinearGradient id={`streak${uid}`} x1={26} y1={8} x2={62} y2={54} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor="#ffffff" stopOpacity={0} />
+              <Stop offset="0.45" stopColor="#ffffff" stopOpacity={0.85} />
+              <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+            </LinearGradient>
+            <RadialGradient id={`pool${uid}`} cx={68} cy={72} r={30} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor="#FFF6D8" stopOpacity={0.42} />
+              <Stop offset="1" stopColor="#FFF6D8" stopOpacity={0} />
+            </RadialGradient>
+            <Filter id={`glow${uid}`} x="-25%" y="-25%" width="150%" height="150%">
+              <FeGaussianBlur stdDeviation={2.2} />
+            </Filter>
+          </Defs>
+          <Circle cx={50} cy={50} r={43} fill="none" stroke={`url(#streak${uid})`} strokeWidth={7} filter={`url(#glow${uid})`} />
+          <Rect x={0} y={0} width={100} height={100} fill={`url(#pool${uid})`} />
         </Svg>
       </Animated.View>
 
