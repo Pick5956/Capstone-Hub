@@ -399,6 +399,12 @@ export function BottomSheet({
   tallHeightRef.current = tallHeight;
 
   // Only the strip along the top listens, so a list inside still scrolls.
+  //
+  // Where the sheet sits is the sum of two values: `snap`, the resting place,
+  // and `drag`, how far the finger has taken it from there. On release the two
+  // are folded into `snap` in one step before anything animates — zeroing the
+  // drag first would throw the sheet back to its old resting place for a frame,
+  // which is what made the movement look like it bounced twice.
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -410,29 +416,54 @@ export function BottomSheet({
         drag.setValue(Math.max(floor, gesture.dy));
       },
       onPanResponderRelease: (_event, gesture) => {
-        const settle = (to: number) => Animated.spring(snap, { toValue: to, useNativeDriver: false, damping: 24, stiffness: 240 });
+        const resting = restingOffsetRef.current;
+        const floor = expandedRef.current ? 0 : -resting;
+        const travelled = Math.max(floor, gesture.dy);
+        // Hand the finger's position over to the resting value in one piece.
+        snap.setValue((expandedRef.current ? 0 : resting) + travelled);
+        drag.setValue(0);
 
-        if (!expandedRef.current && (gesture.dy < -60 || gesture.vy < -0.6)) {
+        // A sheet glides to its place on a curve; a spring here reads as a wobble.
+        const glide = (to: number, then?: () => void) => {
+          Animated.timing(snap, {
+            toValue: to,
+            duration: 300,
+            easing: Easing.bezier(0.32, 0.72, 0, 1),
+            useNativeDriver: false,
+          }).start(({ finished }) => { if (finished) then?.(); });
+        };
+
+        if (!expandedRef.current && (travelled < -60 || gesture.vy < -0.6)) {
           expandedRef.current = true;
-          drag.setValue(0);
-          settle(0).start();
+          glide(0);
           return;
         }
-        if (expandedRef.current && (gesture.dy > 60 || gesture.vy > 0.6)) {
+        if (expandedRef.current && (travelled > 60 || gesture.vy > 0.6)) {
           expandedRef.current = false;
-          drag.setValue(0);
-          settle(restingOffsetRef.current).start();
+          glide(resting);
           return;
         }
-        const dismiss = !expandedRef.current && (gesture.dy > 90 || gesture.vy > 0.8);
-        if (dismiss) {
-          Animated.timing(drag, { toValue: tallHeightRef.current, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false })
-            // The close animation resets the drag once it is off screen; doing it
-            // here would show the sheet again for a frame on its way out.
-            .start(() => onCloseRef.current());
+        if (!expandedRef.current && (travelled > 90 || gesture.vy > 0.8)) {
+          Animated.timing(snap, {
+            toValue: tallHeightRef.current,
+            duration: 180,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+            // The close animation resets the offset once it is off screen; doing
+            // it here would show the sheet again for a frame on its way out.
+          }).start(() => onCloseRef.current());
           return;
         }
-        Animated.spring(drag, { toValue: 0, useNativeDriver: false, damping: 22, stiffness: 260 }).start();
+        glide(expandedRef.current ? 0 : resting);
+      },
+      onPanResponderTerminate: () => {
+        drag.setValue(0);
+        Animated.timing(snap, {
+          toValue: expandedRef.current ? 0 : restingOffsetRef.current,
+          duration: 220,
+          easing: Easing.bezier(0.32, 0.72, 0, 1),
+          useNativeDriver: false,
+        }).start();
       },
     }),
   ).current;
