@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
@@ -115,23 +116,6 @@ export function ChatListSheet({
           <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
         </View>
 
-        {searching ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginBottom: 6, height: 46, paddingHorizontal: 14, borderRadius: 23, backgroundColor: ai.surface }}>
-            <AppIcon name="search-outline" size={18} color={ai.faded} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              autoFocus
-              placeholder={t('ค้นหาแชท', 'Search chats')}
-              placeholderTextColor={ai.faded}
-              accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
-              style={{ flex: 1, fontSize: 15, color: ai.ink, paddingVertical: 0 }}
-            />
-            <Pressable accessibilityRole="button" accessibilityLabel={t('ปิดการค้นหา', 'Close search')} hitSlop={8} onPress={() => { setQuery(''); setSearching(false); }}>
-              <AppIcon name="close" size={18} color={ai.faded} />
-            </Pressable>
-          </View>
-        ) : null}
 
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 18 }}>
           {loading && !conversations ? (
@@ -219,53 +203,109 @@ export function ChatListSheet({
           )}
         </ScrollView>
 
-        {/* The two things this screen is for, within reach of a thumb. */}
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
-            onPress={() => setSearching((current) => !current)}
-            style={({ pressed }) => ({
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: ai.surface,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: pressed ? 0.85 : 1,
-              shadowColor: '#3d2b1f',
-              shadowOpacity: 0.16,
-              shadowRadius: 10,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 6,
-            })}
-          >
-            <AppIcon name="search-outline" size={22} color={ai.ink} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('แชทใหม่', 'New chat')}
-            onPress={() => { onClose(); onNew(); }}
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              height: 52,
-              paddingHorizontal: 22,
-              borderRadius: 26,
-              backgroundColor: '#1f1a17',
-              opacity: pressed ? 0.85 : 1,
-              shadowColor: '#3d2b1f',
-              shadowOpacity: 0.22,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 5 },
-              elevation: 8,
-            })}
-          >
-            <AppIcon name="add" size={22} color="#ffffff" />
-            <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>{t('แชทใหม่', 'New chat')}</Text>
-          </Pressable>
-        </View>
+        {/* Everything this screen is for sits at the bottom, in reach of a thumb.
+            iOS has no ready-made search bar for React Native, and the one in the
+            reference floats over the list rather than sitting in a header, so this
+            is built here: the field rides above the keyboard and the list keeps
+            filtering as it is typed. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+        >
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(244,242,238,0)', 'rgba(244,242,238,0.85)', '#f4f2ee']}
+            locations={[0, 0.55, 1]}
+            style={{ height: 56 }}
+          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 18, backgroundColor: '#f4f2ee' }}>
+            {searching ? (
+              <>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, height: 56, paddingHorizontal: 20, borderRadius: 28, backgroundColor: ai.surface, shadowColor: '#3d2b1f', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 5 }}>
+                  <AppIcon name="search-outline" size={22} color={ai.faint} />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    autoFocus
+                    returnKeyType="search"
+                    placeholder={t('ค้นหา', 'Search')}
+                    placeholderTextColor={ai.faded}
+                    accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
+                    style={{ flex: 1, fontSize: 17, color: ai.ink, paddingVertical: 0 }}
+                  />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ปิดการค้นหา', 'Close search')}
+                  onPress={() => { setQuery(''); setSearching(false); }}
+                  style={({ pressed }) => ({
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    backgroundColor: ai.surface,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                    shadowColor: '#3d2b1f',
+                    shadowOpacity: 0.12,
+                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 5,
+                  })}
+                >
+                  <AppIcon name="close" size={26} color={ai.ink} />
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
+                  onPress={() => setSearching(true)}
+                  style={({ pressed }) => ({
+                    width: 52,
+                    height: 52,
+                    borderRadius: 26,
+                    backgroundColor: ai.surface,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                    shadowColor: '#3d2b1f',
+                    shadowOpacity: 0.16,
+                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 6,
+                  })}
+                >
+                  <AppIcon name="search-outline" size={22} color={ai.ink} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('แชทใหม่', 'New chat')}
+                  onPress={() => { onClose(); onNew(); }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    height: 52,
+                    paddingHorizontal: 22,
+                    borderRadius: 26,
+                    backgroundColor: '#1f1a17',
+                    opacity: pressed ? 0.85 : 1,
+                    shadowColor: '#3d2b1f',
+                    shadowOpacity: 0.22,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 5 },
+                    elevation: 8,
+                  })}
+                >
+                  <AppIcon name="add" size={22} color="#ffffff" />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>{t('แชทใหม่', 'New chat')}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </BottomSheet>
   );
