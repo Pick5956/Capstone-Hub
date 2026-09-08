@@ -107,12 +107,12 @@ export function ChatListSheet({
   };
 
   return (
-    <BottomSheet open={open} onClose={onClose} heightFraction={1} label={t('ปิดรายการแชท', 'Close chat list')}>
-      <View style={{ flex: 1, backgroundColor: '#f4f2ee' }}>
+    <BottomSheet open={open} onClose={onClose} heightFraction={1} background="#f4f2ee" label={t('ปิดรายการแชท', 'Close chat list')}>
+      <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6, gap: 8 }}>
-          <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
-          <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: ai.ink }}>{t('แชท', 'Chats')}</Text>
           <View style={{ width: 44 }} />
+          <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: ai.ink }}>{t('แชท', 'Chats')}</Text>
+          <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
         </View>
 
         {searching ? (

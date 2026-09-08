@@ -339,6 +339,7 @@ export function BottomSheet({
   children,
   label,
   showClose,
+  background,
 }: {
   open: boolean;
   onClose: () => void;
@@ -347,6 +348,8 @@ export function BottomSheet({
   label: string;
   /** A glass close button in the top-right corner. */
   showClose?: boolean;
+  /** The sheet's own colour, so the safe area at the top matches its content. */
+  background?: string;
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -411,7 +414,7 @@ export function BottomSheet({
         <Animated.View
           style={{
             height: sheetHeight,
-            backgroundColor: full ? ai.canvas : ai.surface,
+            backgroundColor: background ?? (full ? ai.canvas : ai.surface),
             borderTopLeftRadius: full ? 0 : 22,
             borderTopRightRadius: full ? 0 : 22,
             paddingTop: full ? insets.top : 8,

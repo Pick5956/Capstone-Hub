@@ -203,17 +203,22 @@ export function SettingsSheet({
   ) : null;
 
   return (
-    <BottomSheet open={open} onClose={onClose} heightFraction={1} label={t('ปิดตั้งค่า', 'Close settings')}>
-      <View style={{ flex: 1, backgroundColor: '#f4f2ee' }}>
+    <BottomSheet open={open} onClose={onClose} heightFraction={1} background="#f4f2ee" label={t('ปิดตั้งค่า', 'Close settings')}>
+      <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 10, gap: 8 }}>
+          {/* Back sits where a back button belongs; close sits under the thumb
+              that opened the sheet. Each side keeps a slot so the title stays centred. */}
           {page === 'root' ? (
-            <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
+            <View style={{ width: 44 }} />
           ) : (
             <GlassButton icon="chevron-back" label={t('ย้อนกลับ', 'Back')} onPress={() => setPage('root')} size={44} />
           )}
           <Text numberOfLines={1} style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: ai.ink }}>{heading}</Text>
-          {/* Balances the button on the left so the title sits in the middle. */}
-          <View style={{ width: 44 }} />
+          {page === 'root' ? (
+            <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
+          ) : (
+            <View style={{ width: 44 }} />
+          )}
         </View>
 
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }}>
