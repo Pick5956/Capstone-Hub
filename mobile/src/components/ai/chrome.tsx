@@ -340,10 +340,10 @@ export function BottomSheet({
   label,
   showClose,
   background,
-  floating,
 }: {
   open: boolean;
   onClose: () => void;
+  /** How much of the screen it covers when it first opens. */
   heightFraction?: number;
   children: ReactNode;
   label: string;
@@ -351,8 +351,6 @@ export function BottomSheet({
   showClose?: boolean;
   /** The sheet's own colour, so the safe area at the top matches its content. */
   background?: string;
-  /** Sit clear of the screen edges, rounded on all four corners. */
-  floating?: boolean;
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -360,13 +358,23 @@ export function BottomSheet({
   const progress = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
   const full = heightFraction >= 1;
-  const sheetHeight = full ? windowHeight : Math.round(windowHeight * heightFraction);
+
+  // A part-height sheet is built at its tallest and held down by an offset, so
+  // dragging it up costs nothing to lay out: pull it open, pull it back to where
+  // it started, or keep pulling to put it away.
+  const tallHeight = full ? windowHeight : Math.round(windowHeight * 0.94);
+  const restingHeight = full ? windowHeight : Math.round(windowHeight * heightFraction);
+  const restingOffset = tallHeight - restingHeight;
+  const snap = useRef(new Animated.Value(restingOffset)).current;
+  const expandedRef = useRef(false);
 
   const [shown, setShown] = useState(open);
 
   useEffect(() => {
     if (open) {
       drag.setValue(0);
+      snap.setValue(restingOffset);
+      expandedRef.current = false;
       setShown(true);
     }
     Animated.timing(progress, {
@@ -380,33 +388,59 @@ export function BottomSheet({
         drag.setValue(0);
       }
     });
-  }, [drag, open, progress, reducedMotion]);
+  }, [drag, open, progress, reducedMotion, restingOffset, snap]);
 
-  // Pull the sheet down to put it away, the gesture every iOS sheet has. Only
-  // the strip along the top listens, so a list inside still scrolls normally.
+  // The responder is built once, so it reads the current handler through a ref.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const restingOffsetRef = useRef(restingOffset);
+  restingOffsetRef.current = restingOffset;
+  const tallHeightRef = useRef(tallHeight);
+  tallHeightRef.current = tallHeight;
+
+  // Only the strip along the top listens, so a list inside still scrolls.
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 3 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
-      onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
+      onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 3 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_event, gesture) => {
+        // Upward travel stops where the sheet is fully open; downward is free,
+        // because past the bottom the gesture becomes a dismissal.
+        const floor = expandedRef.current ? 0 : -restingOffsetRef.current;
+        drag.setValue(Math.max(floor, gesture.dy));
+      },
       onPanResponderRelease: (_event, gesture) => {
-        const dismiss = gesture.dy > 90 || gesture.vy > 0.8;
+        const settle = (to: number) => Animated.spring(snap, { toValue: to, useNativeDriver: false, damping: 24, stiffness: 240 });
+
+        if (!expandedRef.current && (gesture.dy < -60 || gesture.vy < -0.6)) {
+          expandedRef.current = true;
+          drag.setValue(0);
+          settle(0).start();
+          return;
+        }
+        if (expandedRef.current && (gesture.dy > 60 || gesture.vy > 0.6)) {
+          expandedRef.current = false;
+          drag.setValue(0);
+          settle(restingOffsetRef.current).start();
+          return;
+        }
+        const dismiss = !expandedRef.current && (gesture.dy > 90 || gesture.vy > 0.8);
         if (dismiss) {
-          Animated.timing(drag, { toValue: sheetHeight, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false })
+          Animated.timing(drag, { toValue: tallHeightRef.current, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false })
             // The close animation resets the drag once it is off screen; doing it
             // here would show the sheet again for a frame on its way out.
             .start(() => onCloseRef.current());
           return;
         }
-        Animated.spring(drag, { toValue: 0, useNativeDriver: false, damping: 20, stiffness: 260 }).start();
+        Animated.spring(drag, { toValue: 0, useNativeDriver: false, damping: 22, stiffness: 260 }).start();
       },
     }),
   ).current;
-  // The responder is built once, so it reads the current handler through a ref.
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
 
-  const translateY = Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [sheetHeight, 0] }), drag);
+  const translateY = Animated.add(
+    Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [tallHeight, 0] }), snap),
+    drag,
+  );
 
   return (
     <Modal visible={shown} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
@@ -416,16 +450,12 @@ export function BottomSheet({
         </Animated.View>
         <Animated.View
           style={{
-            height: sheetHeight,
+            height: tallHeight,
             backgroundColor: background ?? (full ? ai.canvas : ai.surface),
-            borderRadius: floating ? 30 : 0,
-            borderTopLeftRadius: full ? 0 : floating ? 30 : 22,
-            borderTopRightRadius: full ? 0 : floating ? 30 : 22,
-            marginHorizontal: floating ? 10 : 0,
-            marginBottom: floating ? Math.max(insets.bottom, 10) : 0,
-            overflow: floating ? 'hidden' : 'visible',
+            borderTopLeftRadius: full ? 0 : 28,
+            borderTopRightRadius: full ? 0 : 28,
             paddingTop: full ? insets.top : 8,
-            paddingBottom: floating ? 8 : insets.bottom,
+            paddingBottom: insets.bottom,
             transform: [{ translateY }],
             shadowColor: '#000',
             shadowOpacity: 0.18,

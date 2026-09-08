@@ -76,7 +76,7 @@ export function InsightsSheet({
   const count = insights?.length ?? 0;
 
   return (
-    <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')} showClose floating>
+    <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')} showClose>
       <View style={{ paddingHorizontal: 16, paddingBottom: 8, paddingRight: 62 }}>
         <Text style={{ fontSize: 15, fontWeight: '700', color: '#0a0a0a', letterSpacing: -0.15 }}>{t('ควรรู้วันนี้', "Today's insights")}</Text>
         {count > 0 ? (
