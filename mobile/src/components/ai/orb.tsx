@@ -106,6 +106,8 @@ export function AIOrb({
   }, [reducedMotion, speed, spin]);
 
   const blur = size < 50 ? 1 : 2;
+  // Half speed, so the bright side wanders rather than chases the colour layers.
+  const coreDrift = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
 
   return (
     <View
@@ -137,6 +139,23 @@ export function AIOrb({
           </Animated.View>
         );
       })}
+      {/* The bright core. The web gets it from a second layer that blurs and
+          lifts everything under it; here it is drawn directly, drifting slowly so
+          the light moves the way the web's does. */}
+      <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: size, height: size, transform: [{ rotate: coreDrift }] }}>
+        <Svg width="100%" height="100%" viewBox="0 0 100 100">
+          <Defs>
+            <RadialGradient id={`core${uid}`} cx={44} cy={40} r={58} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor="#FFE712" stopOpacity={0.95} />
+              <Stop offset="0.55" stopColor="#FFDA1F" stopOpacity={0.84} />
+              <Stop offset="0.85" stopColor="#FFB347" stopOpacity={0.29} />
+              <Stop offset="1" stopColor="#FFB347" stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect x={-25} y={-25} width={150} height={150} fill={`url(#core${uid})`} />
+        </Svg>
+      </Animated.View>
+
       {/* The web's inset background shadow: the rim settles into the page instead
           of ending on a hard ring. */}
       <Svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', top: 0, left: 0 }}>
