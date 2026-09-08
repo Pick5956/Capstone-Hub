@@ -188,9 +188,9 @@ export function GlassMenu({
     Animated.spring(progress, {
       toValue: open ? 1 : 0,
       useNativeDriver: true,
-      damping: reducedMotion ? 40 : 14,
-      stiffness: reducedMotion ? 400 : 210,
-      mass: 0.9,
+      damping: reducedMotion ? 40 : 13,
+      stiffness: reducedMotion ? 400 : 190,
+      mass: 0.85,
     }).start(({ finished }) => {
       if (finished && !open) setMounted(false);
     });
@@ -199,12 +199,7 @@ export function GlassMenu({
   if (!mounted) return null;
 
   const grow = from === 'top-right' ? 1 : -1;
-  // It pours out of the corner it was summoned from: narrow and short at first,
-  // overshooting slightly as it settles, while the rows arrive one after another.
-  const scaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] });
-  const scaleY = progress.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] });
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * 30, 0] });
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * -26, 0] });
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.28, 1] });
 
   return (
     <>
@@ -216,7 +211,13 @@ export function GlassMenu({
       />
       <Animated.View
         style={[
-          { position: 'absolute', zIndex: 9, transform: [{ translateX }, { translateY }, { scaleX }, { scaleY }] },
+          {
+            position: 'absolute',
+            zIndex: 9,
+            // Grows out of the button's own corner, not out of its middle.
+            transformOrigin: from === 'top-right' ? 'top right' : 'bottom left',
+            transform: [{ scale }],
+          },
           style,
         ]}
       >
@@ -234,10 +235,10 @@ export function GlassMenu({
           }}
         >
           {items.map((item, index) => {
-            const at = Math.min(0.1 * index, 0.4);
-            const rowIn = progress.interpolate({ inputRange: [at, Math.min(at + 0.55, 1), 1], outputRange: [0, 1, 1] });
+            const at = Math.min(0.08 * index, 0.32);
+            const rowIn = progress.interpolate({ inputRange: [at, Math.min(at + 0.42, 1), 1], outputRange: [0, 1, 1] });
             return (
-            <Animated.View key={item.key} style={{ opacity: rowIn, transform: [{ translateY: rowIn.interpolate({ inputRange: [0, 1], outputRange: [grow * -10, 0] }) }] }}>
+            <Animated.View key={item.key} style={{ opacity: rowIn, transform: [{ translateY: rowIn.interpolate({ inputRange: [0, 1], outputRange: [grow * -12, 0] }) }] }}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={item.label}

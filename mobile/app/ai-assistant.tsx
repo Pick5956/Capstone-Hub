@@ -521,18 +521,23 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
-      {/* The bar behind the header: the chat still slides under it, but softened,
-          so the chat's name never collides with the words passing beneath. */}
+      {/* The header's backdrop. The chat still slides under it, but it is blurred
+          and faded out before it reaches the chat's name — and the blur weakens in
+          steps rather than stopping on a line. */}
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
-        <GlassSurface
-          style={{ height: headerHeight }}
-          fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.88)' }}
-        >
-          <View />
-        </GlassSurface>
+        {[1, 0.74, 0.46].map((share, index) => (
+          <GlassSurface
+            key={share}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: Math.round((headerHeight + 12) * share) }}
+            fallbackStyle={{ backgroundColor: index === 0 ? 'rgba(250,248,242,0.55)' : 'rgba(250,248,242,0.3)' }}
+          >
+            <View />
+          </GlassSurface>
+        ))}
         <LinearGradient
-          colors={['rgba(250,248,242,0.75)', 'rgba(250,248,242,0)']}
-          style={{ height: 18 }}
+          colors={['rgba(250,248,242,0.92)', 'rgba(250,248,242,0.72)', 'rgba(250,248,242,0.28)', 'rgba(250,248,242,0)']}
+          locations={[0, 0.55, 0.82, 1]}
+          style={{ height: headerHeight + 42 }}
         />
       </View>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
