@@ -282,13 +282,6 @@ export function SettingsSheet({
     void patch({ owner_title: next });
   };
 
-  const actionsOnCount = settings
-    ? AI_ACTION_TYPES.filter((type) => settings.action_types?.[type]).length
-    : 0;
-  const insightsOnCount = settings
-    ? INSIGHT_ROWS.filter((row) => settings.insight_kinds?.[row.key]).length
-    : 0;
-
   const heading = page === 'root'
     ? t('การตั้งค่า', 'Settings')
     : page === 'title'
@@ -329,7 +322,7 @@ export function SettingsSheet({
 
           {page === 'root' ? (
             <>
-              <GroupLabel text={t('ผู้ช่วย', 'Assistant')} />
+              <GroupLabel text={t('ทั่วไป', 'General')} />
               <Group>
                 <Row
                   first
@@ -351,13 +344,11 @@ export function SettingsSheet({
                   first
                   icon="shield-checkmark-outline"
                   label={t('ความปลอดภัย', 'Safety')}
-                  value={settings ? (settings.actions_enabled ? t(`เปิด ${actionsOnCount} อย่าง`, `${actionsOnCount} on`) : t('ปิดอยู่', 'Off')) : undefined}
                   onPress={() => setPage('actions')}
                 />
                 <Row
                   icon="notifications-outline"
                   label={t('การแจ้งเตือน', 'Notifications')}
-                  value={settings ? t(`เปิด ${insightsOnCount} อย่าง`, `${insightsOnCount} on`) : undefined}
                   onPress={() => setPage('notifications')}
                 />
               </Group>

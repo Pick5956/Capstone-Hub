@@ -340,6 +340,7 @@ export function BottomSheet({
   label,
   showClose,
   background,
+  floating,
 }: {
   open: boolean;
   onClose: () => void;
@@ -350,6 +351,8 @@ export function BottomSheet({
   showClose?: boolean;
   /** The sheet's own colour, so the safe area at the top matches its content. */
   background?: string;
+  /** Sit clear of the screen edges, rounded on all four corners. */
+  floating?: boolean;
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -415,10 +418,14 @@ export function BottomSheet({
           style={{
             height: sheetHeight,
             backgroundColor: background ?? (full ? ai.canvas : ai.surface),
-            borderTopLeftRadius: full ? 0 : 22,
-            borderTopRightRadius: full ? 0 : 22,
+            borderRadius: floating ? 30 : 0,
+            borderTopLeftRadius: full ? 0 : floating ? 30 : 22,
+            borderTopRightRadius: full ? 0 : floating ? 30 : 22,
+            marginHorizontal: floating ? 10 : 0,
+            marginBottom: floating ? Math.max(insets.bottom, 10) : 0,
+            overflow: floating ? 'hidden' : 'visible',
             paddingTop: full ? insets.top : 8,
-            paddingBottom: insets.bottom,
+            paddingBottom: floating ? 8 : insets.bottom,
             transform: [{ translateY }],
             shadowColor: '#000',
             shadowOpacity: 0.18,
