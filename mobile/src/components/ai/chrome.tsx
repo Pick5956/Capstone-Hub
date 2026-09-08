@@ -55,7 +55,7 @@ export function GlassButton({
   badge,
   dot,
   active,
-  size = 40,
+  size = 46,
 }: {
   icon: AppIconName;
   label: string;
@@ -290,13 +290,33 @@ export function GlassMenu({
 }
 
 /** The same material as a capsule, for the suggested-question chips. */
-export function GlassPill({ label, onPress }: { label: string; onPress: () => void }) {
+export function GlassPill({
+  label,
+  onPress,
+  stretch,
+}: {
+  label: string;
+  onPress: () => void;
+  /** Fill the cell it sits in, so a set of them lines up as a grid. */
+  stretch?: boolean;
+}) {
   const text = (
-    <Text style={{ fontSize: 12.5, fontWeight: '500', color: ai.body }}>{label}</Text>
+    <Text style={{ fontSize: 13.5, fontWeight: '500', color: ai.body, textAlign: 'center' }}>{label}</Text>
   );
-  const box = { minHeight: 36, justifyContent: 'center' as const, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 };
+  const box = {
+    minHeight: 44,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  };
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1, width: stretch ? '100%' : undefined })}
+    >
       {LIQUID_GLASS ? (
         <GlassView glassEffectStyle="regular" isInteractive colorScheme="light" style={box}>
           {text}
@@ -410,7 +430,7 @@ export function BottomSheet({
           ) : null}
           {showClose ? (
             <View style={{ position: 'absolute', top: 10, right: 14, zIndex: 3 }}>
-              <GlassButton icon="close" label={label} onPress={onClose} size={34} />
+              <GlassButton icon="close" label={label} onPress={onClose} size={40} />
             </View>
           ) : null}
           {children}

@@ -678,7 +678,7 @@ export default function AIAssistantScreen() {
                     icon="chevron-down"
                     label={copy('ไปที่ข้อความล่าสุด', 'Jump to latest')}
                     onPress={() => { setStickToBottom(true); scrollRef.current?.scrollToEnd({ animated: true }); }}
-                    size={36}
+                    size={44}
                   />
                 </View>
               ) : null}
@@ -696,10 +696,14 @@ export default function AIAssistantScreen() {
                 <AppIcon name="close" size={14} color={ai.faded} />
               </Pressable>
             ) : null}
+            {/* Two by two: four pills on one wrapping row left an odd one centred
+                underneath, which read as a mistake. */}
             {empty ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingHorizontal: 6, paddingBottom: 2 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, paddingHorizontal: 4, paddingBottom: 2 }}>
                 {suggestions.map((suggestion) => (
-                  <GlassPill key={suggestion} label={suggestion} onPress={() => { void ask(suggestion); }} />
+                  <View key={suggestion} style={{ width: '48.5%' }}>
+                    <GlassPill stretch label={suggestion} onPress={() => { void ask(suggestion); }} />
+                  </View>
                 ))}
               </View>
             ) : null}

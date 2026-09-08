@@ -138,9 +138,9 @@ export const Composer = forwardRef<NativeTextInput, {
       disabled={transcribing || disabled}
       onPress={() => { void (listening ? stopListening() : startListening()); }}
       style={({ pressed }) => ({
-        width: 42,
-        height: 42,
-        borderRadius: 21,
+        width: 46,
+        height: 46,
+        borderRadius: 23,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: listening ? '#ef4444' : pressed ? ai.orangeSoft : 'transparent',
@@ -150,7 +150,7 @@ export const Composer = forwardRef<NativeTextInput, {
       {transcribing ? (
         <ActivityIndicator size="small" color={ai.orange} />
       ) : (
-        <AppIcon name={listening ? 'stop' : 'mic-outline'} size={listening ? 18 : 22} color={listening ? '#ffffff' : ai.faint} />
+        <AppIcon name={listening ? 'stop' : 'mic-outline'} size={listening ? 20 : 24} color={listening ? '#ffffff' : ai.faint} />
       )}
     </Pressable>
   );
@@ -172,9 +172,9 @@ export const Composer = forwardRef<NativeTextInput, {
       disabled={scanning || disabled}
       onPress={() => setAttachOpen((current) => !current)}
       style={({ pressed }) => ({
-        width: 42,
-        height: 42,
-        borderRadius: 21,
+        width: 46,
+        height: 46,
+        borderRadius: 23,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed || scanning ? ai.orangeSoft : 'transparent',
@@ -197,9 +197,9 @@ export const Composer = forwardRef<NativeTextInput, {
         colors={[ai.orange, ai.amber]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', shadowColor: ai.orange, shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }}
+        style={{ width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', shadowColor: ai.orange, shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }}
       >
-        {sending ? <ActivityIndicator size="small" color="#ffffff" /> : <AppIcon name="arrow-up" size={22} color="#ffffff" />}
+        {sending ? <ActivityIndicator size="small" color="#ffffff" /> : <AppIcon name="arrow-up" size={24} color="#ffffff" />}
       </LinearGradient>
     </Pressable>
   );
