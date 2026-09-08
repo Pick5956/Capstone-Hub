@@ -521,23 +521,27 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
-      {/* The header's backdrop. The chat still slides under it, but it is blurred
-          and faded out before it reaches the chat's name — and the blur weakens in
-          steps rather than stopping on a line. */}
+      {/* The header's backdrop. Stacking panes of glass left a visible step where
+          each one ended, so there is one pane and a long fade of the page's own
+          colour over it — the seam lands where the fade is still solid. */}
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
-        {[1, 0.74, 0.46].map((share, index) => (
-          <GlassSurface
-            key={share}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: Math.round((headerHeight + 12) * share) }}
-            fallbackStyle={{ backgroundColor: index === 0 ? 'rgba(250,248,242,0.55)' : 'rgba(250,248,242,0.3)' }}
-          >
-            <View />
-          </GlassSurface>
-        ))}
+        <GlassSurface
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 8 }}
+          fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.6)' }}
+        >
+          <View />
+        </GlassSurface>
         <LinearGradient
-          colors={['rgba(250,248,242,0.92)', 'rgba(250,248,242,0.72)', 'rgba(250,248,242,0.28)', 'rgba(250,248,242,0)']}
-          locations={[0, 0.55, 0.82, 1]}
-          style={{ height: headerHeight + 42 }}
+          colors={[
+            'rgba(250,248,242,0.96)',
+            'rgba(250,248,242,0.92)',
+            'rgba(250,248,242,0.8)',
+            'rgba(250,248,242,0.45)',
+            'rgba(250,248,242,0.16)',
+            'rgba(250,248,242,0)',
+          ]}
+          locations={[0, 0.42, 0.62, 0.78, 0.9, 1]}
+          style={{ height: headerHeight + 56 }}
         />
       </View>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
@@ -557,13 +561,18 @@ export default function AIAssistantScreen() {
           <View style={{ flex: 1 }} />
         )}
         {started ? (
-          <GlassButton
-            icon="ellipsis-horizontal"
-            label={copy('เมนู', 'Menu')}
-            dot={unseenInsights > 0}
-            active={menuOpen}
-            onPress={() => setMenuOpen((current) => !current)}
-          />
+          menuOpen ? (
+            // The menu grows over this corner and takes the button's place, so the
+            // button is not left showing through the glass.
+            <View style={{ width: 40, height: 40 }} />
+          ) : (
+            <GlassButton
+              icon="ellipsis-horizontal"
+              label={copy('เมนู', 'Menu')}
+              dot={unseenInsights > 0}
+              onPress={() => setMenuOpen(true)}
+            />
+          )
         ) : (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
@@ -578,7 +587,7 @@ export default function AIAssistantScreen() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         from="top-right"
-        style={{ top: headerHeight + 4, right: 14 }}
+        style={{ top: insets.top, right: 14 }}
         items={[
           { key: 'chats', icon: 'chatbubbles-outline', label: copy('รายการแชท', 'Chats'), onPress: () => setListOpen(true) },
           {

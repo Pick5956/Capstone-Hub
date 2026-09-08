@@ -185,13 +185,21 @@ export function GlassMenu({
 
   useEffect(() => {
     if (open) setMounted(true);
-    Animated.spring(progress, {
-      toValue: open ? 1 : 0,
-      useNativeDriver: true,
-      damping: reducedMotion ? 40 : 13,
-      stiffness: reducedMotion ? 400 : 190,
-      mass: 0.85,
-    }).start(({ finished }) => {
+    const animation = open
+      ? Animated.spring(progress, {
+          toValue: 1,
+          useNativeDriver: true,
+          damping: reducedMotion ? 40 : 13,
+          stiffness: reducedMotion ? 400 : 190,
+          mass: 0.85,
+        })
+      : Animated.timing(progress, {
+          toValue: 0,
+          duration: reducedMotion ? 0 : 150,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        });
+    animation.start(({ finished }) => {
       if (finished && !open) setMounted(false);
     });
   }, [open, progress, reducedMotion]);
@@ -199,7 +207,7 @@ export function GlassMenu({
   if (!mounted) return null;
 
   const grow = from === 'top-right' ? 1 : -1;
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.28, 1] });
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.04, 1] });
 
   return (
     <>
