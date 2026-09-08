@@ -38,7 +38,7 @@ import {
 } from '@/src/components/ai/bubbles';
 import { AIChart } from '@/src/components/ai/chart';
 import { ChatListSheet } from '@/src/components/ai/chat-list-sheet';
-import { GlassButton, GlassMenu, GlassPill } from '@/src/components/ai/chrome';
+import { GlassButton, GlassMenu, GlassPill, GlassSurface } from '@/src/components/ai/chrome';
 import { Composer } from '@/src/components/ai/composer';
 import { ConfirmCard, type ConfirmState } from '@/src/components/ai/confirm-card';
 import { InsightsSheet, insightKey } from '@/src/components/ai/insights-sheet';
@@ -521,6 +521,20 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
+      {/* The bar behind the header: the chat still slides under it, but softened,
+          so the chat's name never collides with the words passing beneath. */}
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
+        <GlassSurface
+          style={{ height: headerHeight }}
+          fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.88)' }}
+        >
+          <View />
+        </GlassSurface>
+        <LinearGradient
+          colors={['rgba(250,248,242,0.75)', 'rgba(250,248,242,0)']}
+          style={{ height: 18 }}
+        />
+      </View>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
         <GlassButton
           icon="chevron-back"

@@ -76,11 +76,11 @@ export function InsightsSheet({
   const count = insights?.length ?? 0;
 
   return (
-    <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 }}>
+    <BottomSheet open={open} onClose={onClose} heightFraction={0.66} label={t('ปิด', 'Close')} showClose>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8, paddingRight: 62 }}>
         <Text style={{ fontSize: 15, fontWeight: '700', color: '#0a0a0a', letterSpacing: -0.15 }}>{t('ควรรู้วันนี้', "Today's insights")}</Text>
         {count > 0 ? (
-          <Text style={{ fontSize: 12, color: ai.faded }}>
+          <Text style={{ fontSize: 12, color: ai.faded, marginTop: 1 }}>
             {urgent > 0 ? <Text style={{ color: '#be123c', fontWeight: '600' }}>{t(`${urgent} เรื่องด่วน`, `${urgent} urgent`)}</Text> : null}
             {urgent > 0 ? ' · ' : ''}
             {t(`${count} เรื่อง`, `${count} items`)}

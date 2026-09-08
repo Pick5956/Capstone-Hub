@@ -83,7 +83,6 @@ export function GlassButton({
           isInteractive
           // The screen is light-only, so the glass must not follow a dark system theme.
           colorScheme="light"
-          tintColor={active ? 'rgba(249,115,22,0.18)' : undefined}
           style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
         >
           {icon_}
@@ -189,9 +188,9 @@ export function GlassMenu({
     Animated.spring(progress, {
       toValue: open ? 1 : 0,
       useNativeDriver: true,
-      damping: reducedMotion ? 40 : 17,
-      stiffness: reducedMotion ? 400 : 240,
-      mass: 0.8,
+      damping: reducedMotion ? 40 : 14,
+      stiffness: reducedMotion ? 400 : 210,
+      mass: 0.9,
     }).start(({ finished }) => {
       if (finished && !open) setMounted(false);
     });
@@ -200,10 +199,12 @@ export function GlassMenu({
   if (!mounted) return null;
 
   const grow = from === 'top-right' ? 1 : -1;
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
-  // Grows away from its own corner instead of from the middle.
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * 26, 0] });
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * -22, 0] });
+  // It pours out of the corner it was summoned from: narrow and short at first,
+  // overshooting slightly as it settles, while the rows arrive one after another.
+  const scaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] });
+  const scaleY = progress.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] });
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * 30, 0] });
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [grow * -26, 0] });
 
   return (
     <>
@@ -215,7 +216,7 @@ export function GlassMenu({
       />
       <Animated.View
         style={[
-          { position: 'absolute', zIndex: 9, opacity: progress, transform: [{ translateX }, { translateY }, { scale }] },
+          { position: 'absolute', zIndex: 9, transform: [{ translateX }, { translateY }, { scaleX }, { scaleY }] },
           style,
         ]}
       >
@@ -232,9 +233,12 @@ export function GlassMenu({
             elevation: 12,
           }}
         >
-          {items.map((item) => (
+          {items.map((item, index) => {
+            const at = Math.min(0.1 * index, 0.4);
+            const rowIn = progress.interpolate({ inputRange: [at, Math.min(at + 0.55, 1), 1], outputRange: [0, 1, 1] });
+            return (
+            <Animated.View key={item.key} style={{ opacity: rowIn, transform: [{ translateY: rowIn.interpolate({ inputRange: [0, 1], outputRange: [grow * -10, 0] }) }] }}>
             <Pressable
-              key={item.key}
               accessibilityRole="button"
               accessibilityLabel={item.label}
               onPress={() => { onClose(); item.onPress(); }}
@@ -254,7 +258,9 @@ export function GlassMenu({
               </View>
               {item.dot ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ai.orange }} /> : null}
             </Pressable>
-          ))}
+            </Animated.View>
+            );
+          })}
         </GlassSurface>
       </Animated.View>
     </>
@@ -290,12 +296,15 @@ export function BottomSheet({
   heightFraction = 0.62,
   children,
   label,
+  showClose,
 }: {
   open: boolean;
   onClose: () => void;
   heightFraction?: number;
   children: ReactNode;
   label: string;
+  /** A glass close button in the top-right corner. */
+  showClose?: boolean;
 }) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -311,7 +320,7 @@ export function BottomSheet({
       toValue: open ? 1 : 0,
       duration: reducedMotion ? 0 : open ? 300 : 220,
       easing: Easing.bezier(0.32, 0.72, 0, 1),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [drag, open, progress, reducedMotion]);
 
@@ -319,16 +328,17 @@ export function BottomSheet({
   // the strip along the top listens, so a list inside still scrolls normally.
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 3 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
       onPanResponderRelease: (_event, gesture) => {
         const dismiss = gesture.dy > 90 || gesture.vy > 0.8;
         if (dismiss) {
-          Animated.timing(drag, { toValue: sheetHeight, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true })
+          Animated.timing(drag, { toValue: sheetHeight, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false })
             .start(() => { onCloseRef.current(); drag.setValue(0); });
           return;
         }
-        Animated.spring(drag, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 260 }).start();
+        Animated.spring(drag, { toValue: 0, useNativeDriver: false, damping: 20, stiffness: 260 }).start();
       },
     }),
   ).current;
@@ -363,6 +373,11 @@ export function BottomSheet({
           {!full ? <View style={{ alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: '#e5e7eb', marginBottom: 6 }} /> : null}
           {!full ? (
             <View {...pan.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52, zIndex: 2 }} />
+          ) : null}
+          {showClose ? (
+            <View style={{ position: 'absolute', top: 10, right: 14, zIndex: 3 }}>
+              <GlassButton icon="close" label={label} onPress={onClose} size={34} />
+            </View>
           ) : null}
           {children}
         </Animated.View>
