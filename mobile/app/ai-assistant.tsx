@@ -146,6 +146,8 @@ export default function AIAssistantScreen() {
   const welcome = welcomeFor(language, ownerTitle);
   const suggestions = language === 'th' ? SUGGESTIONS_TH : SUGGESTIONS_EN;
   const busy = loading || threadLoading;
+  // The floating header's height: the status bar plus one button row.
+  const headerHeight = insets.top + 42;
 
   // ---------------------------------------------------------------- loading
 
@@ -506,7 +508,7 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
-      <View style={{ paddingTop: insets.top, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingRight: 14, zIndex: 3 }}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingRight: 14, zIndex: 3 }}>
         <GlassButton
           icon="chevron-back"
           label={copy('ย้อนกลับ', 'Back')}
@@ -523,7 +525,7 @@ export default function AIAssistantScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: wide ? 760 : undefined }}>
           {empty ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 24 }}>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 24, paddingTop: headerHeight }}>
               <AIOrb size={128} speed={20} style={{ shadowColor: ai.orange, shadowOpacity: 0.4, shadowRadius: 25, shadowOffset: { width: 0, height: 15 } }} />
               <Text style={{ fontSize: 19, fontWeight: '600', color: '#0a0a0a', textAlign: 'center' }}>{welcome}</Text>
             </View>
@@ -533,7 +535,7 @@ export default function AIAssistantScreen() {
                 ref={scrollRef}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
-                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, gap: 14 }}
+                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: headerHeight + 10, paddingBottom: 12, gap: 14 }}
                 onContentSizeChange={() => { if (stickToBottom) scrollRef.current?.scrollToEnd({ animated: true }); }}
                 onScroll={(event) => {
                   const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
