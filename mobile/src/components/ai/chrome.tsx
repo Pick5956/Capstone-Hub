@@ -433,7 +433,7 @@ export function BottomSheet({
           ) : null}
           {showClose ? (
             <View style={{ position: 'absolute', top: 10, right: 14, zIndex: 3 }}>
-              <GlassButton icon="close" label={label} onPress={onClose} size={40} />
+              <GlassButton icon="close" label={label} onPress={onClose} />
             </View>
           ) : null}
           {children}

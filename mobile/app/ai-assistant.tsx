@@ -601,7 +601,6 @@ export default function AIAssistantScreen() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
             <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
-            <GlassButton icon="create-outline" label={copy('แชทใหม่', 'New chat')} onPress={startNewChat} />
             <GlassButton icon="settings-outline" label={copy('การตั้งค่า', 'Settings')} onPress={() => setSettingsOpen(true)} />
           </View>
         )}
