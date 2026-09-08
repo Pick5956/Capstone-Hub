@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Platform, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppIcon } from '@/src/components/app-icon';
@@ -46,7 +47,25 @@ export function ChatListSheet({
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const editInput = useRef<NativeTextInput | null>(null);
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0),
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  // The sheet already keeps clear of the home indicator, so only the rest of the
+  // keyboard's height is ours to add.
+  const liftedBy = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
 
   useEffect(() => {
     if (!open) {
@@ -117,7 +136,7 @@ export function ChatListSheet({
         </View>
 
 
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 18 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: 120 + liftedBy, paddingHorizontal: 18 }}>
           {loading && !conversations ? (
             <View style={{ paddingVertical: 28, alignItems: 'center' }}><ActivityIndicator color={ai.orange} /></View>
           ) : groups.length === 0 ? (
@@ -208,10 +227,7 @@ export function ChatListSheet({
             reference floats over the list rather than sitting in a header, so this
             is built here: the field rides above the keyboard and the list keeps
             filtering as it is typed. */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-        >
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: liftedBy }}>
           <LinearGradient
             pointerEvents="none"
             colors={['rgba(244,242,238,0)', 'rgba(244,242,238,0.85)', '#f4f2ee']}
@@ -305,7 +321,7 @@ export function ChatListSheet({
               </>
             )}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </BottomSheet>
   );
