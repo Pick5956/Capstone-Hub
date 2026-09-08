@@ -28,6 +28,9 @@ type AIPreferences struct {
 	ActionTypes  map[string]bool
 	InsightKinds map[string]bool
 	OwnerTitle   string
+	// RestaurantName is the shop's own name, read from the same row. Not a
+	// preference — the assistant needs it so it stops calling the shop Dishy.
+	RestaurantName string
 }
 
 // AIPreferenceStore reads and writes the owner's AI preferences for one

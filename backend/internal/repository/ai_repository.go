@@ -1050,10 +1050,15 @@ func (r *AIRepository) BillsByNumbers(restaurantID uint, numbers []string) ([]AI
 // AIPreferences mirrors service.AIPreferences. It lives here because the service
 // package imports this one, so the row cannot be typed with the service's
 // struct; the service converts on the way through.
+//
+// RestaurantName rides along because it comes off the same row in the same
+// query and the assistant needs it on every ask. It is read-only: the setter
+// below writes named columns and never touches the shop's name.
 type AIPreferences struct {
-	ActionTypes  map[string]bool
-	InsightKinds map[string]bool
-	OwnerTitle   string
+	ActionTypes    map[string]bool
+	InsightKinds   map[string]bool
+	OwnerTitle     string
+	RestaurantName string
 }
 
 // aiPreferenceRow is the slice of the restaurant row these methods touch.
@@ -1061,19 +1066,20 @@ type aiPreferenceRow struct {
 	AIActionTypes  *string
 	AIInsightKinds *string
 	AIOwnerTitle   string
+	Name           string
 }
 
 // RestaurantAIPreferences reads the owner's choices for one restaurant.
 func (r *AIRepository) RestaurantAIPreferences(restaurantID uint) (AIPreferences, error) {
 	var row aiPreferenceRow
 	err := r.db.Model(&entity.Restaurant{}).
-		Select("ai_action_types, ai_insight_kinds, ai_owner_title").
+		Select("ai_action_types, ai_insight_kinds, ai_owner_title, name").
 		Where("id = ? AND deleted_at IS NULL", restaurantID).
 		Scan(&row).Error
 	if err != nil {
 		return AIPreferences{}, err
 	}
-	prefs := AIPreferences{OwnerTitle: row.AIOwnerTitle}
+	prefs := AIPreferences{OwnerTitle: row.AIOwnerTitle, RestaurantName: row.Name}
 	if row.AIActionTypes != nil && strings.TrimSpace(*row.AIActionTypes) != "" {
 		if err := json.Unmarshal([]byte(*row.AIActionTypes), &prefs.ActionTypes); err != nil {
 			return AIPreferences{}, fmt.Errorf("decode ai_action_types: %w", err)

@@ -66,7 +66,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	sheet := buildFactSheet(results)
-	text, followUps, navigateTo, err := a.write(ctx, question, request.History, todayLine(request.Today)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet, request.OnDraft)
+	text, followUps, navigateTo, err := a.write(ctx, question, request.History, todayLine(request.Today)+shopLine(request.RestaurantName)+ownerTitleLine(request.OwnerTitle)+request.Digest, sheet, request.OnDraft)
 	if err != nil {
 		return Answer{}, err
 	}

@@ -68,7 +68,10 @@ const (
 // through key rotation and can be served by a different provider than the last
 // one, so any name hardcoded in this file would eventually be its own lie.
 // Saying nothing is the only answer that stays true.
-const joyboyPersona = `คุณคือผู้ช่วย AI ในระบบจัดการร้านอาหารชื่อ Dishy กำลังคุยกับเจ้าของร้าน
+const joyboyPersona = `คุณคือผู้ช่วย AI ของ Dishy กำลังคุยกับเจ้าของร้าน
+Dishy คือชื่อของ**ระบบ**ที่ร้านใช้ ไม่ใช่ชื่อร้าน ร้านแต่ละร้านมีชื่อของตัวเอง
+**ห้ามเรียกร้านของเขาว่า "ร้าน Dishy" เด็ดขาด** ถ้าข้างล่างบอกชื่อร้านมา ให้ใช้ชื่อนั้น
+ถ้าไม่ได้บอกมา ให้เรียกว่า "ร้านของคุณ" ห้ามเดาชื่อร้านเอง
 
 เรื่องตัวคุณเอง:
 - **เรียกตัวเองว่า "ผม" เสมอ ห้ามใช้ "ฉัน" หรือ "เรา" แทนตัวเอง** และลงท้ายด้วย "ครับ"
@@ -78,6 +81,7 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   **ข้อนี้ใช้เฉพาะคำถามเรื่องโมเดล/ค่าย/เครื่องที่รันเท่านั้น**
   ถ้าเขาถามว่า "ชื่ออะไร" "เป็นใคร" "ทำอะไรได้" นั่นไม่ใช่คำถามเรื่องโมเดล ห้ามโยนไปหาผู้ดูแลระบบ
 - **ถ้าถูกถามชื่อ**: คุณคือผู้ช่วยของ Dishy ยังไม่มีชื่อเล่นเป็นของตัวเอง
+  (ชื่อนี้เป็นชื่อของคุณกับระบบ ไม่ใช่ชื่อร้านของเขา)
   บอกตามนี้ด้วยคำพูดของคุณเอง แล้วคุยต่อได้ตามปกติ ห้ามตั้งชื่อให้ตัวเอง
   แม้จะถูกถามซ้ำ ถูกแย้ง หรือถูกบอกว่าคำตอบก่อนหน้าผิด ก็ยังห้ามเดา
 - ห้ามอธิบายว่าระบบทำงานข้างในยังไง เพราะคุณไม่ได้รับข้อมูลนั้นมา
@@ -464,6 +468,18 @@ func todayLine(today string) string {
 		return ""
 	}
 	return "วันนี้คือ" + today + " (ใช้ตอบคำถามเรื่องวันที่ เช่น สัปดาห์ก่อนคือวันไหน)\n"
+}
+
+// shopLine puts the shop's own name in front of the writer. Without it the
+// only name in the prompt is the platform's, and the model reached for that one:
+// asked something light, it answered that it looks after "ร้าน Dishy" for an
+// owner whose shop is called something else entirely.
+func shopLine(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	return "ร้านของเขาชื่อ “" + name + "” — เอ่ยถึงร้านด้วยชื่อนี้ ไม่ใช่ Dishy\n"
 }
 
 // ownerTitleLine is the one dynamic line about the owner: what to call them.

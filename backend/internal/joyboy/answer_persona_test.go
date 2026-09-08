@@ -244,3 +244,35 @@ func TestCleanAnswerLeavesSeatsAlone(t *testing.T) {
 		}
 	}
 }
+
+// The owner asked something light and was told the assistant looks after
+// "ร้าน Dishy". Their shop is not called Dishy; Dishy is the system they bought.
+// The prompt gave the model exactly one name and no shop name at all, so it used
+// the one it had.
+func TestTheShopIsNeverCalledDishy(t *testing.T) {
+	if !strings.Contains(joyboyPersona, "ไม่ใช่ชื่อร้าน") {
+		t.Error("the persona must say Dishy is the system's name, not the shop's")
+	}
+	if !strings.Contains(joyboyPersona, "ร้านของคุณ") {
+		t.Error("with no shop name given, the model needs something true to say instead")
+	}
+
+	// The name itself has to reach the writer, or the rule above is all it has.
+	// It rides in on the same channel as the date and the owner's title, so both
+	// templates have to carry it: a shop question and a question with no data.
+	for _, sheet := range []string{"ยอดขาย 5,000 บาท", ""} {
+		if strings.Contains(answerPrompt("วันนี้ขายดีมั้ย", nil, "", sheet), "บ้านกูเอง") {
+			t.Fatal("the shop name is not part of the template itself")
+		}
+		withShop := answerPrompt("วันนี้ขายดีมั้ย", nil, shopLine("บ้านกูเอง"), sheet)
+		if !strings.Contains(withShop, "บ้านกูเอง") {
+			t.Errorf("the shop name never reaches the writer (sheet %q)", sheet)
+		}
+	}
+
+	// A shop with no name set leaves the line out rather than printing an empty
+	// pair of quotes, which would read as a shop actually called "".
+	if shopLine("   ") != "" {
+		t.Errorf("a blank name should add no line, got %q", shopLine("   "))
+	}
+}

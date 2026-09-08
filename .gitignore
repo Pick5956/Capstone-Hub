@@ -69,3 +69,8 @@ backend/cmd/seed_demo_orders/
 # minted JWTs for hitting the API by hand, was deleted rather than ignored — an
 # access-token minter has no business in the repository at all.
 /backend/cmd/zz*
+
+# Compiled backend binary. `go build -o bin/...` is the normal way to run the
+# server locally, and Windows leaves a *.exe~ beside it when the old binary is
+# still running, so a "git add -A" would otherwise commit 40 MB of build output.
+/backend/bin/

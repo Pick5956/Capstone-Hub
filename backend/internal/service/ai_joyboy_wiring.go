@@ -993,13 +993,16 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		return nil, err
 	}
 
+	// One read for both: the title and the shop's name sit on the same row.
+	prefs := s.preferencesFor(actor.RestaurantID)
 	joyboyRequest := joyboy.Request{
-		Question:   request.Question,
-		History:    joyboyHistory(request.History),
-		Digest:     request.Digest,
-		OwnerTitle: s.preferencesFor(actor.RestaurantID).OwnerTitle,
-		Today:      joyboyTodayContext(repository.BangkokNow()),
-		OnDraft:    request.OnDraft,
+		Question:       request.Question,
+		History:        joyboyHistory(request.History),
+		Digest:         request.Digest,
+		OwnerTitle:     prefs.OwnerTitle,
+		RestaurantName: prefs.RestaurantName,
+		Today:          joyboyTodayContext(repository.BangkokNow()),
+		OnDraft:        request.OnDraft,
 	}
 	var answer joyboy.Answer
 	if draftsCh == nil {

@@ -129,6 +129,11 @@ type Request struct {
 	// OwnerTitle is what the assistant should call the owner ("คุณผู้จัดการ",
 	// "พี่เก่ง"). Empty leaves the persona as it is.
 	OwnerTitle string
+	// RestaurantName is the shop's own name ("บ้านกูเอง"). Without it the only
+	// name in the prompt is the platform's, and the assistant told the owner it
+	// looks after "ร้าน Dishy". Empty leaves the line out, and the persona then
+	// tells the model to say "ร้านของคุณ" rather than guess.
+	RestaurantName string
 	// Today is the date the answer is written on, already in the owner's
 	// words ("วันอาทิตย์ที่ 6 กันยายน 2569"). Empty leaves it out. The tool
 	// reader has always known the date; the answer writer did not, and asked
