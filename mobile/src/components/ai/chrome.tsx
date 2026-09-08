@@ -1,7 +1,7 @@
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Pressable, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Modal, Pressable, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
@@ -19,7 +19,31 @@ import { ai } from './theme';
 // (older iOS, every Android) the same button falls back to the frosted white
 // circle the web page uses, which is why this is one component and not two:
 // the screen never asks which platform it is on.
-const LIQUID_GLASS = isLiquidGlassAvailable();
+export const LIQUID_GLASS = isLiquidGlassAvailable();
+
+/**
+ * A panel in the same material as the buttons: real glass on iOS 26, the
+ * frosted white surface everywhere else. `style` is the shape both share;
+ * `fallbackStyle` is the border and fill only the non-glass version needs.
+ */
+export function GlassSurface({
+  style,
+  fallbackStyle,
+  children,
+}: {
+  style: StyleProp<ViewStyle>;
+  fallbackStyle?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  if (LIQUID_GLASS) {
+    return (
+      <GlassView glassEffectStyle="regular" colorScheme="light" style={style}>
+        {children}
+      </GlassView>
+    );
+  }
+  return <View style={[style, fallbackStyle]}>{children}</View>;
+}
 
 export function GlassButton({
   icon,
@@ -27,7 +51,7 @@ export function GlassButton({
   onPress,
   badge,
   active,
-  size = 34,
+  size = 40,
 }: {
   icon: AppIconName;
   label: string;

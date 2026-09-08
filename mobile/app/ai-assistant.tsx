@@ -138,6 +138,7 @@ export default function AIAssistantScreen() {
 
   const [stickToBottom, setStickToBottom] = useState(true);
   const [showJump, setShowJump] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(120);
   const scrollRef = useRef<ScrollView | null>(null);
   const inputRef = useRef<NativeTextInput | null>(null);
   const generation = useRef(0);
@@ -525,7 +526,7 @@ export default function AIAssistantScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: wide ? 760 : undefined }}>
           {empty ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 24, paddingTop: headerHeight }}>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 24, paddingTop: headerHeight, paddingBottom: composerHeight }}>
               <AIOrb size={128} speed={20} style={{ shadowColor: ai.orange, shadowOpacity: 0.4, shadowRadius: 25, shadowOffset: { width: 0, height: 15 } }} />
               <Text style={{ fontSize: 19, fontWeight: '600', color: '#0a0a0a', textAlign: 'center' }}>{welcome}</Text>
             </View>
@@ -535,7 +536,7 @@ export default function AIAssistantScreen() {
                 ref={scrollRef}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
-                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: headerHeight + 10, paddingBottom: 12, gap: 14 }}
+                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: headerHeight + 10, paddingBottom: composerHeight + 12, gap: 14 }}
                 onContentSizeChange={() => { if (stickToBottom) scrollRef.current?.scrollToEnd({ animated: true }); }}
                 onScroll={(event) => {
                   const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -582,7 +583,7 @@ export default function AIAssistantScreen() {
                 ) : null}
               </ScrollView>
               {showJump ? (
-                <View style={{ position: 'absolute', bottom: 8, alignSelf: 'center' }}>
+                <View style={{ position: 'absolute', bottom: composerHeight + 8, alignSelf: 'center' }}>
                   <GlassButton
                     icon="chevron-down"
                     label={copy('ไปที่ข้อความล่าสุด', 'Jump to latest')}
@@ -594,7 +595,10 @@ export default function AIAssistantScreen() {
             </View>
           )}
 
-          <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 10) + 4, gap: 8 }}>
+          <View
+            onLayout={(event) => setComposerHeight(Math.round(event.nativeEvent.layout.height))}
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 10) + 4, gap: 8 }}
+          >
             {notice ? (
               <Pressable accessibilityRole="button" onPress={() => setNotice(null)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: notice.tone === 'error' ? '#fef2f2' : '#eff6ff', borderWidth: 1, borderColor: notice.tone === 'error' ? '#fecaca' : '#bfdbfe' }}>
                 <AppIcon name={notice.tone === 'error' ? 'alert-circle-outline' : 'information-circle-outline'} size={16} color={notice.tone === 'error' ? '#b91c1c' : '#1d4ed8'} />

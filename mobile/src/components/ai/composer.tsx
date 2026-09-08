@@ -9,6 +9,8 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { receiptDraftToCommand } from '@/src/lib/ai-chat';
+
+import { GlassSurface } from './chrome';
 import type { DisplayLanguage } from '@/src/lib/display-preferences';
 
 import { ai } from './theme';
@@ -67,17 +69,12 @@ export const Composer = forwardRef<NativeTextInput, {
   };
 
   return (
-    <View
-      style={{
+    <GlassSurface
+      style={{ borderRadius: 28, paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 8, gap: 4, overflow: 'hidden' }}
+      fallbackStyle={{
         borderWidth: 1,
         borderColor: focused ? '#fdba74' : '#e5e7eb',
         backgroundColor: ai.surface,
-        borderRadius: 28,
-        paddingTop: 8,
-        paddingBottom: 8,
-        paddingLeft: 10,
-        paddingRight: 8,
-        gap: 4,
         shadowColor: '#000',
         shadowOpacity: 0.05,
         shadowRadius: 2,
@@ -137,6 +134,6 @@ export const Composer = forwardRef<NativeTextInput, {
           </LinearGradient>
         </Pressable>
       </View>
-    </View>
+    </GlassSurface>
   );
 });
