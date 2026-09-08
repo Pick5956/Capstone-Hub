@@ -127,10 +127,26 @@ is unavailable on iOS anyway or nearly so**:
 The print button is hidden on iOS regardless of client, so for an iOS teammate the only difference
 a development build would make is Google login. Password login covers the rest.
 
-So: **iOS teammates run Expo Go**, with two things to watch.
+So: **iOS teammates run Expo Go**, with three things to watch.
 
-- **Expo Go must be the SDK 54 build.** The store version tracks the newest SDK and will refuse to
-  open this project once it moves on. Turn off automatic updates for Expo Go.
+- **Expo Go must match the SDK this project is on** (SDK 57 since the upgrade). The store version
+  tracks the newest SDK and refuses to open a project once it moves on.
+- **The machine serving Metro must be signed in to Expo.** From SDK 57, Expo Go on iOS only opens a
+  project whose manifest is signed, and it asks for that signature by sending
+  `expo-expect-signature: keyid="expo-root"`. An anonymous Metro answers without one and the phone
+  says "You need to be signed in". Android does not ask, so it works either way.
+
+  Sign in with a personal access token rather than the browser flow: `npx expo login --browser`
+  crashes on Windows, because `cmd /c start` mis-parses the `&` in the callback URL. Create the
+  token at expo.dev under **your own** account (Account settings -> Access tokens - the *organisation*
+  token page needs Admin or Owner on the org) and put it in the ignored `mobile/.env`:
+
+  ```env
+  EXPO_TOKEN=<your-personal-expo-access-token>
+  ```
+
+  Signing in renames the tunnel subdomain from `anonymous` to your account name, so any link you
+  shared before that stops working.
 - **Start Metro in Expo Go mode**, not development-client mode:
 
 ```powershell
