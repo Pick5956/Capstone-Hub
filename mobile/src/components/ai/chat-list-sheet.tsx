@@ -57,6 +57,10 @@ export function ChatListSheet({
   // still on its way down.
   const lift = useRef(new Animated.Value(0)).current;
   const bottomInset = insets.bottom;
+  // The composer behind this sheet raises the keyboard too; without this the
+  // hidden bar would follow it.
+  const openRef = useRef(open);
+  openRef.current = open;
 
   useEffect(() => {
     const glide = (to: number, duration: number) => {
@@ -70,6 +74,7 @@ export function ChatListSheet({
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (event) => {
+        if (!openRef.current) return;
         const height = event.endCoordinates.height;
         setKeyboardHeight(height);
         // The sheet already clears the home indicator; only the rest is ours.
@@ -79,6 +84,7 @@ export function ChatListSheet({
     const hide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       (event) => {
+        if (!openRef.current) return;
         setKeyboardHeight(0);
         glide(0, event.duration ?? 250);
       },
@@ -94,7 +100,13 @@ export function ChatListSheet({
       setSearching(false);
       setEditing(null);
     }
-  }, [open]);
+    // The bar sits on the keyboard, so it has to start each visit on the floor.
+    // Closing the sheet while the keyboard is up does not always report the
+    // keyboard going away, which used to leave the bar stranded mid-screen the
+    // next time the list was opened.
+    setKeyboardHeight(0);
+    lift.setValue(0);
+  }, [lift, open]);
 
   const groups = useMemo(() => {
     const now = new Date();
