@@ -66,7 +66,7 @@ export function GlassButton({
   active?: boolean;
   size?: number;
 }) {
-  const icon_ = <AppIcon name={icon} size={size * 0.46} color={active ? ai.deep : ai.muted} />;
+  const icon_ = <AppIcon name={icon} size={size * 0.46} color={active ? ai.deep : ai.ink} />;
   return (
     <Pressable
       accessibilityRole="button"
@@ -82,9 +82,9 @@ export function GlassButton({
         // Whatever is behind the header is blurred, so the button needs its own
         // edge to read as an object rather than part of the haze.
         shadowColor: '#3d2b1f',
-        shadowOpacity: 0.16,
-        shadowRadius: 7,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.24,
+        shadowRadius: 9,
+        shadowOffset: { width: 0, height: 3 },
       })}
     >
       {LIQUID_GLASS ? (
@@ -93,6 +93,9 @@ export function GlassButton({
           isInteractive
           // The screen is light-only, so the glass must not follow a dark system theme.
           colorScheme="light"
+          // A fixed lift, never a state colour: changing this at runtime leaves the
+          // native view wearing the old one.
+          tintColor="rgba(255,255,255,0.42)"
           style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
         >
           {icon_}

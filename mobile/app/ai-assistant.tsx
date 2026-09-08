@@ -529,7 +529,7 @@ export default function AIAssistantScreen() {
           shows up as a line across the chat. */}
       <MaskedView
         pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 80, zIndex: 2 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 54, zIndex: 2 }}
         maskElement={
           <LinearGradient
             colors={[
@@ -541,7 +541,7 @@ export default function AIAssistantScreen() {
               'rgba(0,0,0,0.05)',
               'rgba(0,0,0,0)',
             ]}
-            locations={[0, 0.56, 0.7, 0.81, 0.9, 0.96, 1]}
+            locations={[0, 0.5, 0.66, 0.79, 0.89, 0.96, 1]}
             style={{ flex: 1 }}
           />
         }
