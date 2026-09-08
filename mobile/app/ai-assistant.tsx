@@ -340,12 +340,10 @@ export default function AIAssistantScreen() {
         setPendingQuestion(trimmed);
       }
       const written = answerChips(data.follow_ups, data.navigate, language);
+      // No follow-ups from the writer is a decision, not a gap: the fixed list
+      // is kept only for a question it could not read.
       const actions = written
-        ?? (data.intent === 'unclear'
-          ? getUnclearAIActions(hasPermission, language, canUseAI)
-          : data.intent === 'analysis'
-            ? getGuidedAIActions(trimmed, answer, hasPermission, language, canUseAI)
-            : []);
+        ?? (data.intent === 'unclear' ? getUnclearAIActions(hasPermission, language, canUseAI) : []);
       append({
         id: data.turn_id ? `${data.turn_id}` : newId('a'),
         role: 'assistant',

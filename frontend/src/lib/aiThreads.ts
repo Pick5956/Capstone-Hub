@@ -292,7 +292,13 @@ export function hydrateThreadMessages(
     }
     const question = index > 0 ? messages[index - 1].content : "";
     const tools = message.toolsUsed && message.toolsUsed.length > 0 ? message.toolsUsed : message.tool;
-    const actions = getAnswerChips(question, message.content, membership, language, tools, message.scopeAssumed, message.followUps, message.navigate);
+    // Only what the writer actually put on this turn: an answer that came with
+    // none had none for a reason, and inventing them on reopen would give an old
+    // chat chips it never showed the first time.
+    const wrote = (message.followUps && message.followUps.length > 0) || Boolean(message.navigate);
+    const actions = wrote
+      ? getAnswerChips(question, message.content, membership, language, tools, message.scopeAssumed, message.followUps, message.navigate)
+      : [];
     out.push(actions.length > 0 ? { ...message, actions } : message);
   }
   return out;

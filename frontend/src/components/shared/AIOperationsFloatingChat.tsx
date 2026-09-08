@@ -610,9 +610,7 @@ export default function AIOperationsFloatingChat() {
           ? getAnswerChips(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed, data.follow_ups, data.navigate)
           : data.intent === "unclear"
             ? getUnclearRequestActions(activeMembership, language)
-            : data.intent === "analysis"
-              ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
-              : undefined,
+            : [],
         forecast: data.forecast,
         chart: data.chart,
         planId: data.action_plan?.id,

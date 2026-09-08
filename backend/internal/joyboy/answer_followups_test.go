@@ -86,3 +86,34 @@ func TestSplitFollowUpsKeepsThePageLineApart(t *testing.T) {
 		t.Fatalf("a page line without a path should be dropped: nav=%q ups=%q", nav, ups)
 	}
 }
+
+// The writer may now leave the block out entirely, and a how-to answer writes
+// one with the page line alone. Both shapes have to survive the split.
+func TestSplitFollowUpsAllowsAPageLineWithNoQuestions(t *testing.T) {
+	answer, followUps, navigateTo := splitFollowUps("กดเพิ่มรายจ่ายที่มุมขวาบนครับ\n===ถามต่อ===\nไปหน้า /expenses\n")
+	if navigateTo != "/expenses" {
+		t.Fatalf("navigateTo = %q", navigateTo)
+	}
+	if len(followUps) != 0 {
+		t.Fatalf("a page line on its own should leave no questions: %q", followUps)
+	}
+	if strings.TrimSpace(answer) != "กดเพิ่มรายจ่ายที่มุมขวาบนครับ" {
+		t.Fatalf("answer = %q", answer)
+	}
+}
+
+// Leaving the questions out is a decision the writer is allowed to make, so the
+// prompt has to say so — a rule that reads "ทุกครั้ง" puts the chips straight back.
+func TestTheWriterPromptMakesFollowUpsOptional(t *testing.T) {
+	for _, prompt := range []string{
+		answerPrompt("ยอดขายวันนี้", nil, "ยอดขาย 5,000 บาท", ""),
+		answerPrompt("สวัสดี", nil, "", ""),
+	} {
+		if !strings.Contains(prompt, "ไม่ใช่ทุกคำตอบ") {
+			t.Error("the prompt still asks for follow-ups on every answer")
+		}
+		if !strings.Contains(prompt, "ทักทาย") {
+			t.Error("the prompt does not list the cases that get none")
+		}
+	}
+}
