@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, View } from 'react-native';
 
-import { getAISettings, updateAISettings } from '@/src/api/ai';
+import {
+  getAISettings,
+  listTrashedAIConversations,
+  purgeAIConversation,
+  purgeAllTrashedAIConversations,
+  restoreAIConversation,
+  updateAISettings,
+} from '@/src/api/ai';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
+import { threadStamp } from '@/src/lib/ai-chat';
 import { readFollowUpsEnabled, writeCachedOwnerTitle, writeFollowUpsEnabled } from '@/src/lib/ai-prefs';
 import type { DisplayLanguage } from '@/src/lib/display-preferences';
-import { AI_ACTION_TYPES, type AIActionType, type AIInsightKind, type AISettingsPatch, type AISettingsView } from '@/src/types/ai';
+import { AI_ACTION_TYPES, type AIActionType, type AIConversationSummary, type AIInsightKind, type AISettingsPatch, type AISettingsView } from '@/src/types/ai';
 
 import { BottomSheet, GlassButton } from './chrome';
 import { ai } from './theme';
@@ -19,7 +27,7 @@ import { ai } from './theme';
 // The trash and chat recovery stay on the web, where there is room to show what
 // is in it.
 
-type Page = 'root' | 'title' | 'actions' | 'notifications';
+type Page = 'root' | 'title' | 'actions' | 'notifications' | 'trash';
 
 const ACTION_LABELS: Record<AIActionType, { th: string; en: string }> = {
   set_menu_availability: { th: 'เปิด/ปิดขายเมนู', en: 'Menu availability' },
@@ -123,12 +131,15 @@ export function SettingsSheet({
   language,
   onOwnerTitle,
   onFollowUps,
+  onConversationsChanged,
 }: {
   open: boolean;
   onClose: () => void;
   language: DisplayLanguage;
   onOwnerTitle: (title: string) => void;
   onFollowUps: (enabled: boolean) => void;
+  /** Restoring a chat puts it back in the list, so the screen reloads it. */
+  onConversationsChanged?: () => void;
 }) {
   const t = (th: string, en: string) => (language === 'th' ? th : en);
   const [page, setPage] = useState<Page>('root');
@@ -136,6 +147,94 @@ export function SettingsSheet({
   const [error, setError] = useState<string | null>(null);
   const [followUps, setFollowUps] = useState(true);
   const [title, setTitle] = useState('');
+  const [trashed, setTrashed] = useState<AIConversationSummary[] | null>(null);
+  const [trashBusy, setTrashBusy] = useState(false);
+
+  const loadTrash = async () => {
+    setTrashBusy(true);
+    try {
+      const res = await listTrashedAIConversations();
+      setTrashed(res.conversations ?? []);
+    } catch {
+      setTrashed([]);
+      setError(t('เปิดถังขยะไม่สำเร็จ', 'Could not open the trash'));
+    } finally {
+      setTrashBusy(false);
+    }
+  };
+
+  // One tap, two ways out: put it back, or end it. Deleting for good asks again,
+  // because that one cannot be undone.
+  const openTrashRow = (conversation: AIConversationSummary) => {
+    Alert.alert(conversation.title || t('แชทไม่มีชื่อ', 'Untitled chat'), undefined, [
+      {
+        text: t('กู้คืน', 'Restore'),
+        onPress: () => {
+          void (async () => {
+            try {
+              await restoreAIConversation(conversation.id);
+              setTrashed((rows) => rows?.filter((row) => row.id !== conversation.id) ?? null);
+              onConversationsChanged?.();
+            } catch {
+              setError(t('กู้คืนไม่สำเร็จ', 'Could not restore'));
+            }
+          })();
+        },
+      },
+      {
+        text: t('ลบถาวร', 'Delete forever'),
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(
+            t('ลบถาวรไหม?', 'Delete forever?'),
+            t('แชทนี้จะหายไปเลย กู้คืนไม่ได้อีก', 'This chat goes for good and cannot be restored'),
+            [
+              { text: t('ยกเลิก', 'Cancel'), style: 'cancel' },
+              {
+                text: t('ลบถาวร', 'Delete forever'),
+                style: 'destructive',
+                onPress: () => {
+                  void (async () => {
+                    try {
+                      await purgeAIConversation(conversation.id);
+                      setTrashed((rows) => rows?.filter((row) => row.id !== conversation.id) ?? null);
+                    } catch {
+                      setError(t('ลบไม่สำเร็จ', 'Could not delete'));
+                    }
+                  })();
+                },
+              },
+            ],
+          );
+        },
+      },
+      { text: t('ยกเลิก', 'Cancel'), style: 'cancel' },
+    ]);
+  };
+
+  const emptyTrash = () => {
+    Alert.alert(
+      t('ล้างถังขยะทั้งหมด?', 'Empty the trash?'),
+      t('แชทในถังขยะจะหายไปเลย กู้คืนไม่ได้อีก', 'Everything in the trash goes for good'),
+      [
+        { text: t('ยกเลิก', 'Cancel'), style: 'cancel' },
+        {
+          text: t('ล้างทั้งหมด', 'Empty it'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await purgeAllTrashedAIConversations();
+                setTrashed([]);
+              } catch {
+                setError(t('ล้างถังขยะไม่สำเร็จ', 'Could not empty the trash'));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -196,7 +295,9 @@ export function SettingsSheet({
       ? t('ชื่อที่เรียกคุณ', 'What it calls you')
       : page === 'actions'
         ? t('สิ่งที่ทำแทนคุณได้', 'What it may change')
-        : t('การแจ้งเตือน', 'Notifications');
+        : page === 'trash'
+          ? t('ถังขยะ', 'Trash')
+          : t('การแจ้งเตือน', 'Notifications');
 
   const loading = !settings ? (
     <View style={{ paddingVertical: 28, alignItems: 'center' }}><ActivityIndicator color={ai.orange} /></View>
@@ -267,8 +368,9 @@ export function SettingsSheet({
                 <Row
                   first
                   icon="trash-outline"
-                  label={t('ถังขยะและการกู้คืนแชท', 'Trash and chat recovery')}
-                  detail={t('อยู่ในตั้งค่าผู้ช่วยบนเว็บ', 'Lives in the web settings')}
+                  label={t('ถังขยะ', 'Trash')}
+                  detail={t('แชทที่ลบไว้ กู้คืนได้ภายใน 7 วัน', 'Deleted chats, restorable for 7 days')}
+                  onPress={() => { setPage('trash'); void loadTrash(); }}
                 />
               </Group>
             </>
@@ -326,6 +428,50 @@ export function SettingsSheet({
                       />
                     ))}
                   </Group>
+                </>
+              )}
+            </>
+          ) : null}
+
+          {page === 'trash' ? (
+            <>
+              <GroupLabel text={t('แตะแชทเพื่อกู้คืนหรือลบถาวร', 'Tap a chat to restore it or delete it for good')} />
+              {trashBusy && !trashed ? (
+                <View style={{ paddingVertical: 28, alignItems: 'center' }}><ActivityIndicator color={ai.orange} /></View>
+              ) : (trashed?.length ?? 0) === 0 ? (
+                <Group>
+                  <Row first label={t('ถังขยะว่าง', 'The trash is empty')} />
+                </Group>
+              ) : (
+                <>
+                  <Group>
+                    {(trashed ?? []).map((conversation, index) => (
+                      <Row
+                        key={conversation.id}
+                        first={index === 0}
+                        label={conversation.title || t('แชทไม่มีชื่อ', 'Untitled chat')}
+                        detail={conversation.trashed_at
+                          ? t('ลบเมื่อ ' + threadStamp(conversation.trashed_at, language), 'Deleted ' + threadStamp(conversation.trashed_at, language))
+                          : undefined}
+                        onPress={() => openTrashRow(conversation)}
+                      />
+                    ))}
+                  </Group>
+                  <View style={{ marginTop: 20, marginHorizontal: 12 }}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={emptyTrash}
+                      style={({ pressed }) => ({
+                        minHeight: 52,
+                        borderRadius: 18,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: pressed ? '#fee2e2' : ai.surface,
+                      })}
+                    >
+                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#dc2626' }}>{t('ล้างถังขยะทั้งหมด', 'Empty the trash')}</Text>
+                    </Pressable>
+                  </View>
                 </>
               )}
             </>

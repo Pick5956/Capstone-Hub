@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Platform, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Keyboard, LayoutAnimation, Platform, Pressable, ScrollView, TextInput as NativeTextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -51,21 +51,42 @@ export function ChatListSheet({
   const editInput = useRef<NativeTextInput | null>(null);
   const insets = useSafeAreaInsets();
 
+  // The bar rides on the keyboard, and travels with it: iOS reports how long its
+  // own slide takes, so matching that duration is what keeps the two together.
+  // Setting the offset outright made the bar jump home while the keyboard was
+  // still on its way down.
+  const lift = useRef(new Animated.Value(0)).current;
+  const bottomInset = insets.bottom;
+
   useEffect(() => {
+    const glide = (to: number, duration: number) => {
+      Animated.timing(lift, {
+        toValue: to,
+        duration: duration || 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }).start();
+    };
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (event) => setKeyboardHeight(event.endCoordinates.height),
+      (event) => {
+        const height = event.endCoordinates.height;
+        setKeyboardHeight(height);
+        // The sheet already clears the home indicator; only the rest is ours.
+        glide(Math.max(0, height - bottomInset), event.duration ?? 250);
+      },
     );
     const hide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0),
+      (event) => {
+        setKeyboardHeight(0);
+        glide(0, event.duration ?? 250);
+      },
     );
     return () => { show.remove(); hide.remove(); };
-  }, []);
+  }, [bottomInset, lift]);
 
-  // The sheet already keeps clear of the home indicator, so only the rest of the
-  // keyboard's height is ours to add.
-  const liftedBy = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+  const liftedBy = keyboardHeight > 0 ? Math.max(0, keyboardHeight - bottomInset) : 0;
 
   useEffect(() => {
     if (!open) {
@@ -227,7 +248,7 @@ export function ChatListSheet({
             reference floats over the list rather than sitting in a header, so this
             is built here: the field rides above the keyboard and the list keeps
             filtering as it is typed. */}
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: liftedBy }}>
+        <Animated.View style={{ position: 'absolute', left: 0, right: 0, bottom: lift }}>
           <LinearGradient
             pointerEvents="none"
             colors={['rgba(244,242,238,0)', 'rgba(244,242,238,0.85)', '#f4f2ee']}
@@ -253,7 +274,7 @@ export function ChatListSheet({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('ปิดการค้นหา', 'Close search')}
-                  onPress={() => { setQuery(''); setSearching(false); }}
+                  onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setQuery(''); setSearching(false); }}
                   style={({ pressed }) => ({
                     width: 56,
                     height: 56,
@@ -277,7 +298,7 @@ export function ChatListSheet({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
-                  onPress={() => setSearching(true)}
+                  onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setSearching(true); }}
                   style={({ pressed }) => ({
                     width: 52,
                     height: 52,
@@ -321,7 +342,7 @@ export function ChatListSheet({
               </>
             )}
           </View>
-        </View>
+        </Animated.View>
       </View>
     </BottomSheet>
   );

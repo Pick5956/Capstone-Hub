@@ -130,6 +130,27 @@ export const listAIConversations = (limit = 0) => apiRequest<{ conversations: AI
   `/api/v1/ai/operations/conversations${limit > 0 ? `?limit=${limit}` : ''}`,
 );
 
+/** The trash: chats deleted in the last seven days, newest first. */
+export const listTrashedAIConversations = () => apiRequest<{ conversations: AIConversationSummary[] }>(
+  '/api/v1/ai/operations/conversations?trashed=1',
+);
+
+export const restoreAIConversation = (conversationId: string) => apiRequest<void>(
+  `${conversationPath(conversationId)}/restore`,
+  { method: 'POST' },
+);
+
+/** Delete one chat for good — from the trash only. */
+export const purgeAIConversation = (conversationId: string) => apiRequest<void>(
+  `${conversationPath(conversationId)}/permanent`,
+  { method: 'DELETE' },
+);
+
+export const purgeAllTrashedAIConversations = () => apiRequest<{ deleted: number }>(
+  '/api/v1/ai/operations/conversations/purge',
+  { method: 'POST' },
+);
+
 export const getAIConversationTurns = (conversationId: string) => apiRequest<{ turns: AIConversationTurn[] }>(
   `${conversationPath(conversationId)}/turns`,
 );

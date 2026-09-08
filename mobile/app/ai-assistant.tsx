@@ -90,6 +90,9 @@ import type {
 // thread, streaming answers with charts and follow-ups, and the confirm card
 // under any command. The dock stays out: this screen lives under "More".
 
+// The header buttons and the gap left when one steps aside share this size.
+const HEADER_BUTTON = 46;
+
 const SUGGESTIONS_TH = ['สรุปร้าน', 'เมนูขายดี', 'วัตถุดิบใกล้หมด', 'มูลค่าสต๊อก'];
 const SUGGESTIONS_EN = ['Shop summary', 'Best sellers', 'Low stock', 'Stock value'];
 
@@ -583,8 +586,9 @@ export default function AIAssistantScreen() {
         {started ? (
           menuOpen ? (
             // The menu grows over this corner and takes the button's place, so the
-            // button is not left showing through the glass.
-            <View style={{ width: 40, height: 40 }} />
+            // button is not left showing through the glass. The gap it leaves has to
+            // be the button's exact size, or the title beside it shifts as it opens.
+            <View style={{ width: HEADER_BUTTON, height: HEADER_BUTTON }} />
           ) : (
             <GlassButton
               icon="ellipsis-horizontal"
@@ -597,7 +601,7 @@ export default function AIAssistantScreen() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
             <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
-            <GlassButton icon="create-outline" label={copy('เริ่มแชทใหม่', 'New chat')} onPress={startNewChat} />
+            <GlassButton icon="create-outline" label={copy('แชทใหม่', 'New chat')} onPress={startNewChat} />
             <GlassButton icon="settings-outline" label={copy('การตั้งค่า', 'Settings')} onPress={() => setSettingsOpen(true)} />
           </View>
         )}
@@ -618,7 +622,7 @@ export default function AIAssistantScreen() {
             dot: unseenInsights > 0,
             onPress: () => setInsightsOpen(true),
           },
-          { key: 'new', icon: 'create-outline', label: copy('เริ่มแชทใหม่', 'New chat'), onPress: startNewChat },
+          { key: 'new', icon: 'create-outline', label: copy('แชทใหม่', 'New chat'), onPress: startNewChat },
           { key: 'settings', icon: 'settings-outline', label: copy('การตั้งค่า', 'Settings'), onPress: () => setSettingsOpen(true) },
         ]}
       />
@@ -758,6 +762,7 @@ export default function AIAssistantScreen() {
         language={language}
         onOwnerTitle={setOwnerTitle}
         onFollowUps={setFollowUpsOn}
+        onConversationsChanged={() => { conversationsStale.current = true; void loadConversations(); }}
       />
     </View>
   );
