@@ -521,27 +521,21 @@ export default function AIAssistantScreen() {
         locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
-      {/* The header's backdrop. Stacking panes of glass left a visible step where
-          each one ended, so there is one pane and a long fade of the page's own
-          colour over it — the seam lands where the fade is still solid. */}
+      {/* The header's backdrop. A wash of the page colour hid the seam but left
+          the chat looking bleached under it; clear glass blurs what passes behind
+          without draining it, which is what the reference does. */}
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
         <GlassSurface
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 8 }}
-          fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.6)' }}
+          effect="clear"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 10 }}
+          fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.86)' }}
         >
           <View />
         </GlassSurface>
         <LinearGradient
-          colors={[
-            'rgba(250,248,242,0.96)',
-            'rgba(250,248,242,0.92)',
-            'rgba(250,248,242,0.8)',
-            'rgba(250,248,242,0.45)',
-            'rgba(250,248,242,0.16)',
-            'rgba(250,248,242,0)',
-          ]}
-          locations={[0, 0.42, 0.62, 0.78, 0.9, 1]}
-          style={{ height: headerHeight + 56 }}
+          colors={['rgba(250,248,242,0.34)', 'rgba(250,248,242,0.2)', 'rgba(250,248,242,0)']}
+          locations={[0, 0.7, 1]}
+          style={{ height: headerHeight + 10 }}
         />
       </View>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>

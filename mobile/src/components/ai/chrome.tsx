@@ -30,14 +30,17 @@ export function GlassSurface({
   style,
   fallbackStyle,
   children,
+  effect = 'regular',
 }: {
   style: StyleProp<ViewStyle>;
   fallbackStyle?: StyleProp<ViewStyle>;
   children: ReactNode;
+  /** "clear" blurs what is behind without frosting it pale. */
+  effect?: 'regular' | 'clear';
 }) {
   if (LIQUID_GLASS) {
     return (
-      <GlassView glassEffectStyle="regular" colorScheme="light" style={style}>
+      <GlassView glassEffectStyle={effect} colorScheme="light" style={style}>
         {children}
       </GlassView>
     );
