@@ -292,9 +292,9 @@ export function SettingsSheet({
   const heading = page === 'root'
     ? t('การตั้งค่า', 'Settings')
     : page === 'title'
-      ? t('ชื่อที่เรียกคุณ', 'What it calls you')
+      ? t('ชื่อเรียก', 'Name')
       : page === 'actions'
-        ? t('สิ่งที่ทำแทนคุณได้', 'What it may change')
+        ? t('ความปลอดภัย', 'Safety')
         : page === 'trash'
           ? t('ถังขยะ', 'Trash')
           : t('การแจ้งเตือน', 'Notifications');
@@ -334,14 +334,13 @@ export function SettingsSheet({
                 <Row
                   first
                   icon="person-circle-outline"
-                  label={t('ชื่อที่เรียกคุณ', 'What it calls you')}
+                  label={t('ชื่อเรียก', 'Name')}
                   value={settings?.owner_title?.trim() || t('คุณผู้จัดการ', 'Manager')}
                   onPress={() => setPage('title')}
                 />
                 <Row
                   icon="sparkles-outline"
-                  label={t('คำถามแนะนำ', 'Suggested questions')}
-                  detail={t('ชิปถามต่อใต้คำตอบ', 'Follow-up chips under answers')}
+                  label={t('แนะนำให้ถาม', 'Suggested questions')}
                   toggle={{ on: followUps, onChange: (next) => { setFollowUps(next); void writeFollowUpsEnabled(next); onFollowUps(next); } }}
                 />
               </Group>
@@ -350,8 +349,8 @@ export function SettingsSheet({
               <Group>
                 <Row
                   first
-                  icon="flash-outline"
-                  label={t('สิ่งที่ทำแทนคุณได้', 'What it may change')}
+                  icon="shield-checkmark-outline"
+                  label={t('ความปลอดภัย', 'Safety')}
                   value={settings ? (settings.actions_enabled ? t(`เปิด ${actionsOnCount} อย่าง`, `${actionsOnCount} on`) : t('ปิดอยู่', 'Off')) : undefined}
                   onPress={() => setPage('actions')}
                 />
@@ -392,7 +391,7 @@ export function SettingsSheet({
                     autoFocus
                     placeholder={t('คุณผู้จัดการ', 'Manager')}
                     placeholderTextColor={ai.faded}
-                    accessibilityLabel={t('ชื่อที่เรียกคุณ', 'What it calls you')}
+                    accessibilityLabel={t('ชื่อเรียก', 'Name')}
                     style={{ minHeight: 44, fontSize: 17, color: ai.ink, paddingVertical: 0 }}
                   />
                 </View>
