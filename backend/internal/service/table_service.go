@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -50,7 +51,26 @@ type TableTagRequest struct {
 }
 
 func (s *TableService) ListTables(restaurantID uint) ([]entity.RestaurantTable, error) {
-	return s.repo.ListTables(restaurantID)
+	tables, err := s.repo.ListTables(restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	// A failure to look up bookings must not cost the floor its table map: the
+	// reminder is an extra on the card, and losing it is far cheaper than
+	// losing the ability to open a table.
+	upcoming, err := s.repo.UpcomingReservationsByTable(restaurantID, repository.BangkokNow())
+	if err != nil {
+		return tables, nil
+	}
+	for index := range tables {
+		reservation, ok := upcoming[tables[index].ID]
+		if !ok {
+			continue
+		}
+		tables[index].UpcomingReservationAt = reservation.ReservedFor
+		tables[index].UpcomingReservationName = reservation.Name
+	}
+	return tables, nil
 }
 
 func (s *TableService) CreateTable(restaurantID uint, req *TableRequest) (*entity.RestaurantTable, error) {
@@ -194,12 +214,20 @@ func (s *TableService) UpdateTableStatus(restaurantID, userID, tableID uint, sta
 	return s.repo.FindTable(restaurantID, updatedID)
 }
 
-// ReserveTable books a table and records the reservation, both in one transaction.
-func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, name string) (*entity.RestaurantTable, error) {
+// ReserveTable books a table. With reservedFor nil it holds the table now: the
+// table switches to `reserved` and stops taking orders. With reservedFor set it
+// records a booking for later and deliberately leaves the table alone, so the
+// floor can keep selling it until the guests actually turn up. See the field
+// comment on entity.Reservation.ReservedFor for why.
+func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, name string, guestCount int, reservedFor *time.Time) (*entity.RestaurantTable, error) {
 	phone = strings.TrimSpace(phone)
 	name = strings.TrimSpace(name)
 	if !isValidReservationPhone(phone) {
 		return nil, errors.New("reservation phone is required")
+	}
+	guestCount = normalizeReservationGuestCount(guestCount)
+	if reservedFor != nil {
+		return s.scheduleReservation(restaurantID, userID, tableID, phone, name, guestCount, *reservedFor)
 	}
 	var updatedID uint
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
@@ -241,6 +269,41 @@ func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, n
 			if err := tx.UpdateReservation(activeReservation); err != nil {
 				return err
 			}
+		}
+		updatedID = table.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindTable(restaurantID, updatedID)
+}
+
+// scheduleReservation records a booking for later without touching the table.
+//
+// It deliberately skips both guards the hold path applies. The `free`-only check
+// is wrong here because a table with guests on it right now is exactly the table
+// you want to book for tonight, and the open-order check is wrong for the same
+// reason. Nothing about this row stops the floor selling the table meanwhile;
+// it is a note with a time on it.
+func (s *TableService) scheduleReservation(restaurantID, userID, tableID uint, phone, name string, guestCount int, reservedFor time.Time) (*entity.RestaurantTable, error) {
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if table.Status == entity.TableStatusInactive {
+			return errors.New("table is inactive")
+		}
+		reservation := reservationForTable(table, userID, phone, name)
+		reservation.GuestCount = guestCount
+		reservation.ReservedFor = &reservedFor
+		// Always a new row, never a reuse of the table's open hold: one table can
+		// carry several bookings at different times, and folding them into one
+		// another would silently overwrite somebody's booking.
+		if err := tx.CreateReservation(reservation); err != nil {
+			return err
 		}
 		updatedID = table.ID
 		return nil

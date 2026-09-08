@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { useTabSwipeExclusionHandlers } from '@/src/components/tab-swipe-context';
-import { breakpoints, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
+import { breakpoints, controlShadow, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
 
 export function Button({
   label,
@@ -48,6 +48,9 @@ export function Button({
           borderRadius: radius.md,
           backgroundColor,
           paddingHorizontal: compact ? spacing.md : spacing.lg,
+          // A ghost button has no surface of its own, so a lift under it would
+          // read as a floating rectangle with nothing in it.
+          ...(variant === 'ghost' ? null : controlShadow),
           opacity: disabled || loading ? 0.48 : pressed ? 0.78 : 1,
           transform: [{ scale: pressed ? 0.985 : 1 }],
         },
@@ -58,6 +61,51 @@ export function Button({
         ? <ActivityIndicator color={color} size="small" />
         : leading || (icon ? <AppIcon color={color} name={icon} size={19} /> : null)}
       <Text style={{ color, fontSize: 14, fontWeight: '700' }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * An action reduced to its icon, for the top-right of a screen header where a
+ * labelled button would crowd out the title. `accessibilityLabel` is required
+ * rather than optional: with the text gone it is the only name the control has.
+ */
+export function IconButton({
+  icon,
+  accessibilityLabel,
+  onPress,
+  disabled,
+  variant = 'secondary',
+}: {
+  icon: AppIconName;
+  accessibilityLabel: string;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: 'primary' | 'secondary';
+}) {
+  const isPrimary = variant === 'primary';
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      hitSlop={4}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: isPrimary ? palette.primary : palette.borderStrong,
+        borderRadius: radius.full,
+        backgroundColor: isPrimary ? palette.primary : palette.surface,
+        ...controlShadow,
+        opacity: disabled ? 0.48 : pressed ? 0.78 : 1,
+      })}
+    >
+      <AppIcon color={isPrimary ? palette.primaryText : palette.text} name={icon} size={20} />
     </Pressable>
   );
 }
@@ -284,6 +332,7 @@ export function TextField({
   icon,
   multiline,
   maxLength,
+  minHeight,
   error,
 }: {
   label: string;
@@ -301,6 +350,9 @@ export function TextField({
   /** Hard cap on typed characters. Mirror the backend `binding:"max=N"` for the
    *  field so the keyboard stops before the API rejects the request. */
   maxLength?: number;
+  /** Starting height for a multiline field. The default reserves three lines,
+   *  which is generous for a note that is usually a few words. */
+  minHeight?: number;
   error?: string | null;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -309,7 +361,8 @@ export function TextField({
   return (
     <View style={{ gap: spacing.sm }}>
       <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '600' }}>{label}</Text>
-      <View style={{ justifyContent: multiline ? 'flex-start' : 'center' }}>
+      {/* Shadow on the wrapper, not the input — see SearchField for why. */}
+      <View style={{ justifyContent: multiline ? 'flex-start' : 'center', borderRadius: radius.md, ...controlShadow }}>
         {icon ? (
           <View
             style={{
@@ -344,7 +397,7 @@ export function TextField({
           secureTextEntry={Boolean(secureTextEntry && !revealed)}
           textContentType={textContentType}
           style={{
-            minHeight: multiline ? 104 : 54,
+            minHeight: minHeight ?? (multiline ? 104 : 54),
             borderWidth: 1,
             borderColor: error ? palette.danger : focused ? palette.primary : palette.controlBorder,
             borderRadius: radius.md,
@@ -375,16 +428,24 @@ export function SearchField({
   placeholder,
   accessibilityLabel,
   clearLabel = 'Clear search',
+  autoFocus,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   placeholder: string;
   accessibilityLabel: string;
   clearLabel?: string;
+  /** For a field that appears on demand: without it the caller has to tap the
+   *  magnifier and then the field it just summoned. */
+  autoFocus?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ justifyContent: 'center' }}>
+    // The lift sits on this wrapper, not on the TextInput: Android's ReactEditText
+    // applies background, border and radius from the style but not box shadow, so
+    // a shadow set on the input itself renders on iOS and silently vanishes on
+    // Android. The radius here has to match the input so the glow follows its shape.
+    <View style={{ justifyContent: 'center', borderRadius: radius.md, ...controlShadow }}>
       <View style={{ position: 'absolute', left: spacing.md, zIndex: 1, pointerEvents: 'none' }}>
         <AppIcon color={focused ? palette.textStrong : palette.muted} name="search-outline" size={19} />
       </View>
@@ -392,6 +453,7 @@ export function SearchField({
         accessibilityLabel={accessibilityLabel}
         autoCapitalize="none"
         autoCorrect={false}
+        autoFocus={autoFocus}
         onBlur={() => setFocused(false)}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}
@@ -434,7 +496,13 @@ export function SearchField({
   );
 }
 
-export function ChipGroup<T extends string | number>({ label, value, options, onChange, scrollable = false }: { label?: string; value: T; options: Array<{ label: string; value: T }>; onChange: (value: T) => void; scrollable?: boolean }) {
+/**
+ * `fill` splits the row evenly between the chips instead of sizing each to its
+ * own text, for the case where the group is the whole width of a screen and
+ * content-sized chips would leave dead space to their right. It has no effect
+ * with `scrollable`, where the row is wider than the viewport by design.
+ */
+export function ChipGroup<T extends string | number>({ label, value, options, onChange, scrollable = false, fill = false }: { label?: string; value: T; options: Array<{ label: string; value: T }>; onChange: (value: T) => void; scrollable?: boolean; fill?: boolean }) {
   const tabSwipeExclusionHandlers = useTabSwipeExclusionHandlers();
   const controls = options.map((option) => {
     const selected = option.value === value;
@@ -447,15 +515,19 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
         style={({ pressed }) => ({
           minHeight: 44,
           justifyContent: 'center',
+          alignItems: fill && !scrollable ? 'center' : undefined,
+          flex: fill && !scrollable ? 1 : undefined,
+          minWidth: fill && !scrollable ? 0 : undefined,
           borderWidth: 1,
           borderColor: selected ? palette.primary : palette.borderStrong,
           borderRadius: radius.md,
           backgroundColor: selected ? palette.primary : palette.surface,
           paddingHorizontal: spacing.md,
+          ...controlShadow,
           opacity: pressed ? 0.72 : 1,
         })}
       >
-        <Text style={{ color: selected ? palette.primaryText : palette.text, fontSize: 13, fontWeight: '700' }}>{option.label}</Text>
+        <Text numberOfLines={fill && !scrollable ? 1 : undefined} style={{ color: selected ? palette.primaryText : palette.text, fontSize: 13, fontWeight: '700' }}>{option.label}</Text>
       </Pressable>
     );
   });
@@ -474,7 +546,7 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
           {controls}
         </ScrollView>
       ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>{controls}</View>
+        <View style={{ flexDirection: 'row', flexWrap: fill ? 'nowrap' : 'wrap', gap: spacing.sm }}>{controls}</View>
       )}
     </View>
   );
@@ -526,6 +598,7 @@ export function Select<T extends string | number>({
           borderRadius: radius.md,
           backgroundColor: palette.surface,
           paddingHorizontal: spacing.md,
+          ...controlShadow,
           opacity: disabled ? 0.6 : pressed ? 0.72 : 1,
         })}
       >
@@ -567,7 +640,10 @@ export function Select<T extends string | number>({
               borderTopLeftRadius: radius.md,
               borderTopRightRadius: radius.md,
               backgroundColor: palette.surface,
-              paddingBottom: spacing.xl,
+              // Clears the home indicator. At spacing.xl the last row sat right
+              // on the gesture bar, which both looks cramped and is where the
+              // system swallows the tap.
+              paddingBottom: spacing.xxxl + spacing.md,
             }}
           >
             {label ? (
@@ -576,9 +652,10 @@ export function Select<T extends string | number>({
               </View>
             ) : null}
             <ScrollView keyboardShouldPersistTaps="handled">
-              {options.map((option) => {
+              {options.map((option, index) => {
                 const isSelected = option.value === value;
                 return (
+                  <View key={String(option.value)}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
@@ -610,12 +687,74 @@ export function Select<T extends string | number>({
                     </Text>
                     {isSelected ? <AppIcon color={palette.primary} name="checkmark" size={20} /> : null}
                   </Pressable>
+                  {/* Inset hairline, and none after the last row. Drawn as its
+                      own view rather than a bottom border so it can stop short
+                      of both edges instead of walling the sheet off. */}
+                  {index === options.length - 1 ? null : (
+                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.divider, marginHorizontal: spacing.lg }} />
+                  )}
+                  </View>
                 );
               })}
             </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
+    </View>
+  );
+}
+
+/**
+ * One choice per line with the state on the right, for a decision worth reading
+ * before making — a payment method, say. Chips put the options side by side and
+ * ask you to compare them at a glance; a stacked list asks you to read them.
+ */
+export function RadioGroup<T extends string | number>({ label, value, options, onChange }: { label?: string; value: T; options: Array<{ label: string; value: T; disabled?: boolean }>; onChange: (value: T) => void }) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {label ? <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>{label}</Text> : null}
+      <View style={{ borderWidth: 1, borderColor: palette.controlBorder, borderRadius: radius.md, backgroundColor: palette.surface, overflow: 'hidden' }}>
+        {options.map((option, index) => {
+          const selected = option.value === value;
+          return (
+            <View key={String(option.value)}>
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected, disabled: Boolean(option.disabled) }}
+              disabled={option.disabled}
+              onPress={() => onChange(option.value)}
+              style={({ pressed }) => ({
+                minHeight: 52,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                paddingHorizontal: spacing.md,
+                backgroundColor: pressed ? palette.surfaceSubtle : 'transparent',
+                opacity: option.disabled ? 0.48 : 1,
+              })}
+            >
+              <Text numberOfLines={1} style={{ minWidth: 0, flex: 1, color: palette.text, fontSize: 15, fontWeight: selected ? '700' : '500' }}>{option.label}</Text>
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: selected ? palette.primary : palette.borderStrong,
+                  borderRadius: radius.full,
+                }}
+              >
+                {selected ? <View style={{ width: 11, height: 11, borderRadius: radius.full, backgroundColor: palette.primary }} /> : null}
+              </View>
+            </Pressable>
+            {index === options.length - 1 ? null : (
+              <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: palette.divider, marginHorizontal: spacing.md }} />
+            )}
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }

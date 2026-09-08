@@ -8,18 +8,27 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
-import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader } from '@/src/components/ui';
+import { Button, ChipGroup, EmptyState, Feedback, IconButton, SearchField, SectionHeader } from '@/src/components/ui';
 import { money, tableStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
+import { reservationReminder } from '@/src/lib/reservation-schedule';
 import { canViewReservationHistory, tableEntryAction } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
+import { breakpoints, controlShadow, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
 import type { Order } from '@/src/types/order';
 import type { RestaurantTable } from '@/src/types/table';
 
 const activeOrderStatuses = ['open', 'sent_to_kitchen', 'cooking', 'ready', 'served'];
+
+/**
+ * Space above a compact tile for the booking tab to straddle its top edge.
+ * Roughly half the tab's height, so the rest of it overlaps the card and it
+ * reads as attached rather than floating. Reserved on every tile, booking or
+ * not, so the grid keeps one row height.
+ */
+const RESERVATION_BADGE_GUTTER = 11;
 
 export default function TablesScreen() {
   const { width } = useWindowDimensions();
@@ -35,6 +44,7 @@ export default function TablesScreen() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
+  const [compactView, setCompactView] = useState(false);
   const [selectedZone, setSelectedZone] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,19 +152,33 @@ export default function TablesScreen() {
     router.push({ pathname: '/order/new' as never, params: { tableId: String(table.ID) } } as never);
   }
 
+  // The three secondary actions live in the header as icons so the search field
+  // gets the full width of its own row. Each carries its label for screen
+  // readers, which is the only name an icon-only control has.
+  const headerActions = [
+    // The icon shows the density being switched TO, not the one in use: a
+    // toggle that shows its current state gives you nothing to predict from.
+    <IconButton
+      key="density"
+      accessibilityLabel={compactView ? copy('มุมมองแบบเต็ม', 'Detailed view') : copy('มุมมองแบบย่อ', 'Compact view')}
+      icon={compactView ? 'grid-outline' : 'apps-outline'}
+      onPress={() => setCompactView(!compactView)}
+    />,
+    canTakeOrder ? <IconButton key="takeaway" accessibilityLabel={copy('ซื้อกลับบ้าน', 'Takeaway')} icon="bag-handle-outline" onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : null,
+    // A bare clock reads as "something about time", not "the list of bookings".
+    // The screen behind this is a filterable list of reservations, so the icon
+    // is the clipboard a restaurant keeps that list on — and it stays clearly
+    // apart from the calendar next to it, which is where a booking is made.
+    canViewHistory ? <IconButton key="history" accessibilityLabel={copy('ประวัติการจองโต๊ะ', 'Reservation history')} icon="clipboard-outline" onPress={() => router.push('/reservations' as never)} /> : null,
+  ].filter(Boolean);
+
   return (
-    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<AppRefreshControl onRefresh={load} />} action={canTakeOrder ? <Button compact icon="bag-handle-outline" variant="secondary" label={copy('ซื้อกลับบ้าน', 'Takeaway')} onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : undefined}>
+    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<AppRefreshControl onRefresh={load} />} action={headerActions.length ? <View style={{ flexDirection: 'row', gap: spacing.sm }}>{headerActions}</View> : undefined}>
       {error ? <Feedback title={copy('โหลดผังโต๊ะไม่ได้', 'Could not load the table map')} detail={error} tone="danger" /> : null}
       {notice ? <Feedback title={copy('ยังเปิดโต๊ะนี้ไม่ได้', 'This table cannot be opened yet')} detail={notice} tone="warning" /> : null}
       {!canTakeOrder ? <Feedback title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('เลือกโหมดงานอื่นที่บัญชีนี้ได้รับอนุญาตจากเมนูด้านล่าง', 'Choose another work mode allowed for this account from the menu below.')} tone="info" /> : null}
       <View style={{ gap: spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-          <View style={{ minWidth: 0, flex: 1 }}>
-            <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ', 'Search tables')} />
-          </View>
-          {canTakeOrder ? <Button compact icon="calendar-outline" variant="secondary" label={copy('จองโต๊ะ', 'Reserve')} onPress={() => router.push('/table-reservation' as never)} /> : null}
-          {canViewHistory ? <Button compact icon="time-outline" variant="secondary" label={copy('ประวัติจอง', 'History')} onPress={() => router.push('/reservations' as never)} /> : null}
-        </View>
+        <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ', 'Search tables')} />
         {zones.length > 1 ? (
           <ChipGroup
             label={copy('เลือกโซน', 'Select zone')}
@@ -185,19 +209,81 @@ export default function TablesScreen() {
                   const statusLabel = order
                     ? copy('กำลังใช้งาน', 'In use')
                     : tableStatusLabel(table.status, language);
+                  const reminder = reservationReminder(table.upcoming_reservation_at, new Date(), language);
+                  const accessibilityLabel = copy(
+                    `โต๊ะ ${table.display_label || table.table_number}, ${order ? 'กำลังใช้งาน' : tableStatusLabel(table.status, language)}`,
+                    `Table ${table.display_label || table.table_number}, ${order ? 'in use' : tableStatusLabel(table.status, language)}`,
+                  );
+                  // A tab straddling the card's top edge instead of a line inside
+                  // it. Inside, the reminder grew only the cards that had one, and
+                  // since a wrapped row stretches to its tallest item that pushed a
+                  // whole row out of step with the rest of the grid. The gutter is
+                  // reserved on every card so they all still measure the same.
+                  const reminderBadge = (
+                    <View style={{ height: RESERVATION_BADGE_GUTTER }}>
+                      {reminder ? (
+                        <View
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: spacing.sm,
+                            // The card is a later sibling, so without this it
+                            // paints over the tab's lower half and leaves a
+                            // sliced-off blue stub above the tile.
+                            zIndex: 2,
+                            elevation: 2,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 3,
+                            borderRadius: radius.full,
+                            backgroundColor: palette.info,
+                            paddingHorizontal: spacing.sm,
+                            paddingVertical: 1,
+                            ...controlShadow,
+                          }}
+                        >
+                          <AppIcon color={palette.primaryText} name="time-outline" size={11} />
+                          <Text selectable numberOfLines={1} style={{ color: palette.primaryText, fontSize: 11, fontWeight: '700' }}>{reminder}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                  if (compactView) {
+                    // Three to a row, and only what tells the floor whether it can
+                    // seat someone: which table, and whether it is taken. The
+                    // booking reminder stays because losing it is the difference
+                    // between a warning and no warning, but the guest count, order
+                    // number and running total are all detail for a screen you have
+                    // already decided to open.
+                    return (
+                      <View key={table.ID} style={{ width: tabletWorkspace ? undefined : '31%', minWidth: tabletWorkspace ? 108 : 0, maxWidth: tabletWorkspace ? 160 : undefined, flexGrow: tabletWorkspace ? 1 : 0, flexBasis: tabletWorkspace ? 116 : 'auto' }}>
+                        {reminderBadge}
+                        <Pressable
+                          accessibilityLabel={accessibilityLabel}
+                          accessibilityRole="button"
+                          onPress={() => open(table)}
+                          style={({ pressed }) => ({ gap: 2, borderWidth: 1, borderColor: tint.backgroundColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, paddingHorizontal: spacing.sm, paddingVertical: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
+                        >
+                          <Text selectable numberOfLines={1} style={{ color: tint.color, fontSize: 18, fontWeight: '800', lineHeight: 26 }}>{table.display_label || table.table_number}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                            <View style={{ width: 7, height: 7, borderRadius: radius.full, backgroundColor: tint.color }} />
+                            <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: tint.color, fontWeight: '700' }]}>{statusLabel}</Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    );
+                  }
                   return (
                     <Pressable
-                      accessibilityLabel={copy(
-                        `โต๊ะ ${table.display_label || table.table_number}, ${order ? 'กำลังใช้งาน' : tableStatusLabel(table.status, language)}`,
-                        `Table ${table.display_label || table.table_number}, ${order ? 'in use' : tableStatusLabel(table.status, language)}`,
-                      )}
+                      accessibilityLabel={accessibilityLabel}
                       accessibilityRole="button"
                       key={table.ID}
                       onPress={() => open(table)}
                       // Phones get an exact two-column grid; tablets may grow to fill a
                       // row but are capped, so one card left over on the last row keeps
                       // the size of every other card instead of spanning the workspace.
-                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, maxWidth: tabletWorkspace ? 260 : undefined, minHeight: 148, flexGrow: tabletWorkspace ? 1 : 0, flexBasis: tabletWorkspace ? 176 : 'auto', gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
+                      //
+                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, maxWidth: tabletWorkspace ? 260 : undefined, minHeight: 148, flexGrow: tabletWorkspace ? 1 : 0, flexBasis: tabletWorkspace ? 176 : 'auto', gap: spacing.sm, borderWidth: 1, borderColor: tint.backgroundColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                         <Text selectable numberOfLines={1} style={{ minWidth: 0, flex: 1, color: tint.color, fontSize: 23, fontWeight: '800', lineHeight: 30 }}>{table.display_label || table.table_number}</Text>
@@ -207,10 +293,23 @@ export default function TablesScreen() {
                         <View style={{ width: 8, height: 8, borderRadius: radius.full, backgroundColor: tint.color }} />
                         <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: tint.color, fontWeight: '700' }]}>{statusLabel}</Text>
                       </View>
-                      <Text selectable numberOfLines={2} style={[typeScale.caption, { color: palette.muted }]}>{order
-                        ? copy(`${order.customer_count.toLocaleString('th-TH')} คน`, `${order.customer_count.toLocaleString('en-US')} guests`)
-                        : copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`)}
-                      {table.tags?.length ? ` · ${table.tags.map((tag) => tag.name).join(', ')}` : ''}</Text>
+                      {/* The booking shares the seats line rather than taking one
+                          of its own. A line of its own grew the card, and because
+                          a wrapped row stretches to its tallest tile that pushed
+                          every card beside it out with empty space. Tags give way
+                          to it: a table someone is coming for outranks decoration. */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: palette.muted }]}>{order
+                          ? copy(`${order.customer_count.toLocaleString('th-TH')} คน`, `${order.customer_count.toLocaleString('en-US')} guests`)
+                          : copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`)}
+                        {!reminder && table.tags?.length ? ` · ${table.tags.map((tag) => tag.name).join(', ')}` : ''}</Text>
+                        {reminder ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <AppIcon color={palette.info} name="time-outline" size={13} />
+                            <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.info, fontWeight: '700' }]}>{reminder}</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <View style={{ flex: 1 }} />
                       {order ? (
                         <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>

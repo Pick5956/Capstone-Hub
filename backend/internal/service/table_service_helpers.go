@@ -76,6 +76,19 @@ func isValidReservationPhone(phone string) bool {
 	return digits >= 9
 }
 
+// normalizeReservationGuestCount keeps the column's CHECK satisfiable from any
+// caller. Zero is what an older client that does not send the field looks like,
+// and it means "not stated", not "nobody".
+func normalizeReservationGuestCount(guestCount int) int {
+	if guestCount < 1 {
+		return 1
+	}
+	if guestCount > 9999 {
+		return 9999
+	}
+	return guestCount
+}
+
 func validateTableCanBeReserved(status string) error {
 	if status != entity.TableStatusFree {
 		return errors.New("table is not free")

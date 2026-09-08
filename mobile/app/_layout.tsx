@@ -41,7 +41,6 @@ const bundledFonts = {
   [APP_FONT_FAMILIES.medium]: require('../assets/fonts/Kanit-Medium.ttf'),
   [APP_FONT_FAMILIES.semiBold]: require('../assets/fonts/Kanit-SemiBold.ttf'),
   [APP_FONT_FAMILIES.bold]: require('../assets/fonts/Kanit-Bold.ttf'),
-  [APP_FONT_FAMILIES.extraBold]: require('../assets/fonts/Kanit-ExtraBold.ttf'),
 };
 
 function TabletWorkspaceStackLayout({ children }: { children: ReactNode }) {

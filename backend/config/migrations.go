@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 24
+	CurrentSchemaVersion int64 = 26
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -466,6 +466,46 @@ func schemaMigrationPlan() []SchemaMigration {
 						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability','create_expense','set_menu_price','create_menu_item'))`,
 				).Error; err != nil {
 					return fmt.Errorf("recreate AI action type constraint: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 25,
+			Name:    "reservation_reserved_for",
+			Up: func(ctx *MigrationContext) error {
+				// Additive and nullable on purpose: every reservation written
+				// before this migration was a hold-the-table-now booking, and a
+				// null `reserved_for` is exactly how that is spelled afterwards.
+				// Nothing has to be backfilled and no existing row changes meaning.
+				for _, statement := range []string{
+					`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS reserved_for TIMESTAMPTZ`,
+					`CREATE INDEX IF NOT EXISTS idx_reservations_reserved_for ON reservations (restaurant_id, reserved_for)`,
+				} {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("add reservation booking time: %w", err)
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 26,
+			Name:    "reservation_guest_count",
+			Up: func(ctx *MigrationContext) error {
+				// NOT NULL with a default so existing rows land on 1 rather than
+				// null: a booking made before this column existed had a party
+				// size, it just was not written down, and 1 is the honest floor.
+				// The CHECK is added after the backfill for the same reason.
+				for _, statement := range []string{
+					`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS guest_count BIGINT NOT NULL DEFAULT 1`,
+					`UPDATE reservations SET guest_count = 1 WHERE guest_count IS NULL OR guest_count < 1`,
+					`ALTER TABLE reservations DROP CONSTRAINT IF EXISTS chk_reservations_guest_count_positive`,
+					`ALTER TABLE reservations ADD CONSTRAINT chk_reservations_guest_count_positive CHECK (guest_count > 0)`,
+				} {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("add reservation guest count: %w", err)
+					}
 				}
 				return nil
 			},

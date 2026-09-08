@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"Project-M/internal/entity"
 
 	"gorm.io/gorm"
@@ -25,6 +27,37 @@ func (r *TableRepository) ListTables(restaurantID uint) ([]entity.RestaurantTabl
 		Order("CASE WHEN restaurant_tables.zone_id IS NULL THEN 0 ELSE 1 END asc, table_zones.display_order asc, restaurant_tables.sequence_number asc, restaurant_tables.id asc").
 		Find(&tables).Error
 	return tables, err
+}
+
+// UpcomingReservationsByTable returns the next scheduled booking per table, for
+// the window the floor can act on.
+//
+// One query for the whole restaurant rather than one per table: the table map is
+// the busiest read in the app and an N+1 here would be paid on every refresh.
+//
+// The window starts an hour in the past because a guest booked for 16:00 who has
+// not walked in yet is exactly who the reminder is for, and ends twelve hours
+// ahead because a booking for next week on a card being read during service is
+// noise, not a reminder.
+func (r *TableRepository) UpcomingReservationsByTable(restaurantID uint, now time.Time) (map[uint]entity.Reservation, error) {
+	var reservations []entity.Reservation
+	err := r.db.
+		Where("restaurant_id = ? AND status = ? AND reserved_for IS NOT NULL", restaurantID, entity.ReservationStatusActive).
+		Where("reserved_for BETWEEN ? AND ?", now.Add(-time.Hour), now.Add(12*time.Hour)).
+		Order("reserved_for asc").
+		Find(&reservations).Error
+	if err != nil {
+		return nil, err
+	}
+	// Ordered ascending, so the first row seen for a table is its next booking.
+	nextByTable := make(map[uint]entity.Reservation, len(reservations))
+	for _, reservation := range reservations {
+		if _, seen := nextByTable[reservation.TableID]; seen {
+			continue
+		}
+		nextByTable[reservation.TableID] = reservation
+	}
+	return nextByTable, nil
 }
 
 func (r *TableRepository) Transaction(fn func(tx *TableRepository) error) error {

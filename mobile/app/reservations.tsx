@@ -194,6 +194,20 @@ export default function ReservationsScreen() {
                     {copy('เบอร์โทร', 'Phone')}: {reservation.phone || '−'}
                   </Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }}>
+                    {/* Only booked-for-later reservations carry a time. A hold
+                        has none by design, and printing an empty field for it
+                        would read as missing data rather than a different kind
+                        of booking. */}
+                    {reservation.reserved_for ? (
+                      <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
+                        <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                          {copy('นัดเวลา', 'Arriving')}
+                        </Text>
+                        <Text selectable style={[typeScale.caption, { fontWeight: '700' }]}>
+                          {formatDateTime(reservation.reserved_for, language)}
+                        </Text>
+                      </View>
+                    ) : null}
                     <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
                       <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
                         {copy('จองเมื่อ', 'Reserved at')}

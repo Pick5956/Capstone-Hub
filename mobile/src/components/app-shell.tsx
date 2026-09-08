@@ -448,7 +448,10 @@ function ScreenHeading({
 }) {
   const { copy } = useDisplayPreferences();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+    // With a subtitle the text block is tall enough that top-alignment reads
+    // correctly. Without one it is a single line against a 44px back button,
+    // and top-aligning leaves the chevron sitting 8px below the title.
+    <View style={{ flexDirection: 'row', alignItems: subtitle ? 'flex-start' : 'center', gap: spacing.md }}>
       {showBack ? (
         <Pressable
           accessibilityLabel={copy('ย้อนกลับ', 'Go back')}
@@ -467,7 +470,9 @@ function ScreenHeading({
         </Pressable>
       ) : null}
       <View style={{ minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-        <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
+        {/* No gap: the two lines belong to each other, and the leading built
+            into each line already separates them. */}
+        <View style={{ minWidth: 0, flex: 1 }}>
           {titleContent ?? (
             <Text accessibilityRole="header" selectable style={typeScale.hero}>{title}</Text>
           )}
@@ -492,6 +497,9 @@ export function AppScreen({
   footer,
   contentStyle,
   contentMaxWidth,
+  stickyHeading = false,
+  stickyContent,
+  onScrollStart,
 }: {
   title: string;
   titleContent?: React.ReactNode;
@@ -505,6 +513,18 @@ export function AppScreen({
   footer?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   contentMaxWidth?: number;
+  /** Keep the title, back control and header action pinned while the content
+   *  scrolls under them. Opt-in: it costs permanent vertical space, which is
+   *  only worth paying on a screen long enough to lose your place in. */
+  stickyHeading?: boolean;
+  /** Controls that stay pinned under the heading — filters a long list is read
+   *  through, which are useless once they have scrolled away. Needs
+   *  `stickyHeading`, since it renders inside that same pinned block. */
+  stickyContent?: React.ReactNode;
+  /** Fires when the reader starts dragging the content. Deliberately the drag,
+   *  not every scroll event: focusing a field can scroll the view on its own,
+   *  and a screen that reacts to that would undo what the reader just opened. */
+  onScrollStart?: () => void;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -781,6 +801,24 @@ export function AppScreen({
       />
     </MotionReveal>
   );
+  const pinnedHeading = scroll && stickyHeading ? (
+    <View
+      style={{
+        alignItems: 'center',
+        paddingHorizontal: horizontalPadding,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.border,
+        backgroundColor: screenBackground,
+      }}
+    >
+      <View style={{ width: '100%', maxWidth, gap: spacing.md }}>
+        {heading}
+        {stickyContent}
+      </View>
+    </View>
+  ) : null;
   const main = scroll ? (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -790,13 +828,16 @@ export function AppScreen({
       onMomentumScrollBegin={reportVerticalScrollNow}
       onMomentumScrollEnd={reportVerticalScrollNow}
       onScroll={reportVerticalScrollNow}
-      onScrollBeginDrag={reportVerticalScrollNow}
+      onScrollBeginDrag={() => {
+        reportVerticalScrollNow();
+        onScrollStart?.();
+      }}
       onScrollEndDrag={reportVerticalScrollNow}
       refreshControl={refreshControl}
       scrollEventThrottle={32}
     >
       <View style={[{ width: '100%', maxWidth, gap: spacing.xl }, contentStyle]}>
-        {heading}
+        {stickyHeading ? null : heading}
         {children}
       </View>
     </ScrollView>
@@ -823,6 +864,7 @@ export function AppScreen({
         edges={isTablet ? ['top', 'right'] : ['top', 'left', 'right']}
         style={{ backgroundColor: screenBackground }}
       />
+      {pinnedHeading}
       {main}
       {footer ? <SafeAreaView edges={isTablet ? ['right', 'bottom'] : ['left', 'right', 'bottom']} style={{ backgroundColor: palette.surface }}>{footer}</SafeAreaView> : null}
     </Animated.View>

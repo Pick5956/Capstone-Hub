@@ -224,6 +224,8 @@ func TestLegacyTableStatusCannotSeatReservationWithoutOpeningOrder(t *testing.T)
 		table.ID,
 		"0812345678",
 		"Arriving guest",
+		2,
+		nil,
 	); err != nil {
 		t.Fatalf("reserve table: %v", err)
 	}
@@ -335,6 +337,8 @@ func TestReserveTableReusesStaleActiveReservation(t *testing.T) {
 		table.ID,
 		"0812345678",
 		"Current guest",
+		2,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("reserve table with stale active lifecycle: %v", err)
@@ -436,6 +440,8 @@ func TestTableMetadataUpdatePreservesExistingLifecycleStatuses(t *testing.T) {
 		reservedTable.ID,
 		"0812345678",
 		"Reserved guest",
+		2,
+		nil,
 	); err != nil {
 		t.Fatalf("reserve table: %v", err)
 	}
@@ -487,6 +493,8 @@ func TestDeleteTableRejectsActiveReservation(t *testing.T) {
 		table.ID,
 		"0812345678",
 		"Waiting guest",
+		2,
+		nil,
 	); err != nil {
 		t.Fatalf("reserve table: %v", err)
 	}
@@ -550,6 +558,8 @@ func TestReservationSeatingSerializesConcurrentOrderOpen(t *testing.T) {
 		table.ID,
 		"0812345678",
 		"Arriving guest",
+		2,
+		nil,
 	); err != nil {
 		t.Fatalf("reserve table: %v", err)
 	}

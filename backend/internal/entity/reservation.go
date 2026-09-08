@@ -28,6 +28,23 @@ type Reservation struct {
 	Status           string     `json:"status" gorm:"size:16;not null;default:'active';index:idx_reservations_restaurant_status,priority:2;check:chk_reservations_status,status IN ('active','seated','cancelled')"`
 	ReservedByUserID uint       `json:"reserved_by_user_id"`
 	ResolvedAt       *time.Time `json:"resolved_at"`
+	// ReservedFor is when the guests say they will arrive, and it is what
+	// separates the two kinds of booking this table supports.
+	//
+	// Null means "hold this table now": the table is switched to `reserved` and
+	// stops taking orders until someone seats or cancels it. That is the walk-up
+	// case, and it is what the web POS still does.
+	//
+	// Set means a booking for later. The table is deliberately NOT held — it
+	// stays sellable right up to the moment the guests arrive, because holding a
+	// table from the afternoon for an evening booking loses the restaurant the
+	// whole evening on that table.
+	ReservedFor *time.Time `json:"reserved_for" gorm:"index"`
+	// How many guests the booking is for. Kept on the reservation rather than
+	// derived from the table's capacity at seating time, because which table a
+	// party of six ends up on is a decision the floor makes later — the party
+	// size is what the guest actually told you on the phone.
+	GuestCount int `json:"guest_count" gorm:"not null;default:1;check:chk_reservations_guest_count_positive,guest_count > 0"`
 
 	Table *RestaurantTable `json:"table,omitempty" gorm:"foreignKey:TableID"`
 	Staff *User            `json:"staff,omitempty" gorm:"foreignKey:ReservedByUserID"`
