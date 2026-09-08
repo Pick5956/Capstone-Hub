@@ -26,6 +26,17 @@ import { ai } from './theme';
 /** One line of text plus its padding; above this the capsule becomes a box. */
 const ONE_LINE = 46;
 
+// Mono AAC in an m4a on both platforms. The stock low-quality preset records
+// narrowband AMR in a .3gp on Android, which the transcription endpoint does not
+// accept and which speech recognition reads poorly anyway.
+const VOICE_NOTE = {
+  ...RecordingPresets.LOW_QUALITY,
+  extension: '.m4a',
+  numberOfChannels: 1,
+  bitRate: 64000,
+  android: { outputFormat: 'mpeg4' as const, audioEncoder: 'aac' as const },
+};
+
 export const Composer = forwardRef<NativeTextInput, {
   value: string;
   onChange: (text: string) => void;
@@ -44,7 +55,7 @@ export const Composer = forwardRef<NativeTextInput, {
   const [transcribing, setTranscribing] = useState(false);
   // Speech goes to the shop's own backend, which runs it through Whisper; the
   // phone has no recogniser of its own inside Expo Go.
-  const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
+  const recorder = useAudioRecorder(VOICE_NOTE);
   const t = (th: string, en: string) => (language === 'th' ? th : en);
   const canSend = value.trim().length > 0 && !sending && !disabled;
   const tall = value.length > 0 && contentHeight > ONE_LINE;
