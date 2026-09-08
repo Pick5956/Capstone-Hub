@@ -557,8 +557,18 @@ export default function AIAssistantScreen() {
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
         <GlassButton
           icon="chevron-back"
-          label={copy('ย้อนกลับ', 'Back')}
-          onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/more' as never); }}
+          label={started ? copy('กลับไปหน้าเริ่มต้นของผู้ช่วย', 'Back to the assistant home') : copy('ย้อนกลับ', 'Back')}
+          onPress={() => {
+            // Inside a chat, back goes up one level to the assistant's own home
+            // rather than out of the assistant entirely. The chat is saved and
+            // reopens from the list, and a second press leaves as it always did.
+            if (started) {
+              startNewChat();
+              return;
+            }
+            if (router.canGoBack()) router.back();
+            else router.replace('/more' as never);
+          }}
         />
         {started ? (
           <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
