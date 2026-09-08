@@ -21,6 +21,7 @@ import {
   confirmAIActionPlan,
   deleteAIConversation,
   getAIConversationTurns,
+  getAISettings,
   getProactiveInsights,
   listAIConversations,
   renameAIConversation,
@@ -71,6 +72,7 @@ import {
   readFollowUpsEnabled,
   readSeenInsights,
   writeActiveThread,
+  writeCachedOwnerTitle,
   writeSeenInsights,
 } from '@/src/lib/ai-prefs';
 import { can } from '@/src/lib/rbac';
@@ -218,7 +220,17 @@ export default function AIAssistantScreen() {
     if (!canUseAI) return;
     resetThread();
     let active = true;
-    void readCachedOwnerTitle().then((title) => { if (active) setOwnerTitle(title); });
+    // The cache paints the greeting immediately; the shop's settings are the
+    // truth and correct it a moment later.
+    void readCachedOwnerTitle().then((title) => { if (active && title) setOwnerTitle(title); });
+    getAISettings()
+      .then((view) => {
+        if (!active) return;
+        const title = (view.owner_title ?? '').trim();
+        setOwnerTitle(title);
+        void writeCachedOwnerTitle(title);
+      })
+      .catch(() => undefined);
     void readFollowUpsEnabled().then((enabled) => { if (active) setFollowUpsOn(enabled); });
     void readSeenInsights(scope).then((keys) => { if (active) setSeenInsights(keys); });
     void readActiveThread(scope).then((id) => { if (active && id) void openThread(id); });

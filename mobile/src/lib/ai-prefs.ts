@@ -70,17 +70,33 @@ export async function writeActiveThread(scope: string, conversationId: string | 
   await write(ACTIVE_THREAD_KEY, JSON.stringify(parsed));
 }
 
-export async function readSeenInsights(scope: string): Promise<string[]> {
-  const raw = await read(`${INSIGHTS_SEEN_KEY}_${scope}`);
-  if (!raw) return [];
+/**
+ * Which insights this owner has already read, per restaurant. The scope goes in
+ * the value, never in the key: a key may only hold letters, digits, dots,
+ * dashes and underscores, and a scope contains a colon — a key built from one
+ * is rejected, and the write is lost without an error.
+ */
+async function readSeenMap(): Promise<Record<string, string[]>> {
+  const raw = await read(INSIGHTS_SEEN_KEY);
+  if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(parsed ?? {})) {
+      if (Array.isArray(value)) out[key] = value.filter((item): item is string => typeof item === 'string');
+    }
+    return out;
   } catch {
-    return [];
+    return {};
   }
 }
 
+export async function readSeenInsights(scope: string): Promise<string[]> {
+  return (await readSeenMap())[scope] ?? [];
+}
+
 export async function writeSeenInsights(scope: string, keys: string[]): Promise<void> {
-  await write(`${INSIGHTS_SEEN_KEY}_${scope}`, JSON.stringify(keys.slice(-60)));
+  const map = await readSeenMap();
+  map[scope] = keys.slice(-60);
+  await write(INSIGHTS_SEEN_KEY, JSON.stringify(map));
 }
