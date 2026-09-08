@@ -588,7 +588,7 @@ export default function AIAssistantScreen() {
             <GlassButton icon="chatbubbles-outline" label={copy('รายการแชท', 'Chats')} onPress={() => setListOpen(true)} />
             <GlassButton icon="notifications-outline" label={copy('ควรรู้วันนี้', "Today's insights")} badge={unseenInsights} active={insightsOpen} onPress={() => setInsightsOpen(true)} />
             <GlassButton icon="create-outline" label={copy('เริ่มแชทใหม่', 'New chat')} onPress={startNewChat} />
-            <GlassButton icon="settings-outline" label={copy('ตั้งค่า AI', 'AI settings')} onPress={() => setSettingsOpen(true)} />
+            <GlassButton icon="settings-outline" label={copy('การตั้งค่า', 'Settings')} onPress={() => setSettingsOpen(true)} />
           </View>
         )}
       </View>
@@ -609,7 +609,7 @@ export default function AIAssistantScreen() {
             onPress: () => setInsightsOpen(true),
           },
           { key: 'new', icon: 'create-outline', label: copy('เริ่มแชทใหม่', 'New chat'), onPress: startNewChat },
-          { key: 'settings', icon: 'settings-outline', label: copy('ตั้งค่า AI', 'AI settings'), onPress: () => setSettingsOpen(true) },
+          { key: 'settings', icon: 'settings-outline', label: copy('การตั้งค่า', 'Settings'), onPress: () => setSettingsOpen(true) },
         ]}
       />
 

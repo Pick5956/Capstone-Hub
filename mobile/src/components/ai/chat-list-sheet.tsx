@@ -11,9 +11,10 @@ import type { AIConversationSummary } from '@/src/types/ai';
 import { BottomSheet, GlassButton } from './chrome';
 import { ai } from './theme';
 
-// The chat list, the web's AIChatList "sheet" variant: search, a new-chat row,
-// then the chats grouped by day. Rename happens on the row itself; the "…"
-// menu offers rename and delete (delete moves to the trash the web can restore).
+// The chat list as a phone shows a list of sessions: no cards, no dividers, just
+// a marker, a name and one grey line under it, grouped by day. The two things
+// you actually came to do — start a chat, find one — float at the bottom where a
+// thumb reaches, instead of sitting in the header.
 
 const GROUP_ORDER: AIThreadGroup[] = ['today', 'yesterday', 'week', 'older'];
 
@@ -42,12 +43,14 @@ export function ChatListSheet({
 }) {
   const t = (th: string, en: string) => (language === 'th' ? th : en);
   const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const editInput = useRef<NativeTextInput | null>(null);
 
   useEffect(() => {
     if (!open) {
       setQuery('');
+      setSearching(false);
       setEditing(null);
     }
   }, [open]);
@@ -105,40 +108,36 @@ export function ChatListSheet({
 
   return (
     <BottomSheet open={open} onClose={onClose} heightFraction={1} label={t('ปิดรายการแชท', 'Close chat list')}>
-      <View style={{ flex: 1, paddingHorizontal: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: 6, paddingBottom: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <AppIcon name="chatbubbles-outline" size={16} color={ai.orange} />
-            <Text style={{ fontSize: 15, fontWeight: '600', color: ai.ink }}>{t('แชท', 'Chats')}</Text>
-          </View>
-          <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} />
+      <View style={{ flex: 1, backgroundColor: '#f4f2ee' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6, gap: 8 }}>
+          <GlassButton icon="close" label={t('ปิด', 'Close')} onPress={onClose} size={44} />
+          <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: ai.ink }}>{t('แชท', 'Chats')}</Text>
+          <View style={{ width: 44 }} />
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: ai.surface, borderWidth: 1, borderColor: '#e5e7eb' }}>
-          <AppIcon name="search-outline" size={16} color={ai.faded} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={t('ค้นหาแชท', 'Search chats')}
-            placeholderTextColor={ai.faded}
-            accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
-            style={{ flex: 1, fontSize: 14, color: ai.ink, paddingVertical: 0 }}
-          />
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => { onClose(); onNew(); }}
-          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, height: 48, paddingHorizontal: 8, borderRadius: 12, backgroundColor: pressed ? 'rgba(255,255,255,0.7)' : 'transparent' })}
-        >
-          <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: ai.orangeSoft, alignItems: 'center', justifyContent: 'center' }}>
-            <AppIcon name="create-outline" size={15} color="#ea580c" />
+
+        {searching ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginBottom: 6, height: 46, paddingHorizontal: 14, borderRadius: 23, backgroundColor: ai.surface }}>
+            <AppIcon name="search-outline" size={18} color={ai.faded} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+              placeholder={t('ค้นหาแชท', 'Search chats')}
+              placeholderTextColor={ai.faded}
+              accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
+              style={{ flex: 1, fontSize: 15, color: ai.ink, paddingVertical: 0 }}
+            />
+            <Pressable accessibilityRole="button" accessibilityLabel={t('ปิดการค้นหา', 'Close search')} hitSlop={8} onPress={() => { setQuery(''); setSearching(false); }}>
+              <AppIcon name="close" size={18} color={ai.faded} />
+            </Pressable>
           </View>
-          <Text style={{ fontSize: 13.5, fontWeight: '500', color: ai.ink }}>{t('แชทใหม่', 'New chat')}</Text>
-        </Pressable>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+        ) : null}
+
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 18 }}>
           {loading && !conversations ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}><ActivityIndicator color={ai.orange} /></View>
+            <View style={{ paddingVertical: 28, alignItems: 'center' }}><ActivityIndicator color={ai.orange} /></View>
           ) : groups.length === 0 ? (
-            <Text style={{ fontSize: 13, color: ai.faded, textAlign: 'center', paddingVertical: 24, paddingHorizontal: 16 }}>
+            <Text style={{ fontSize: 14, color: ai.faded, textAlign: 'center', paddingVertical: 30 }}>
               {query.trim()
                 ? t('ไม่มีแชทที่ชื่อตรงกับคำค้น', 'No chat matches that search')
                 : t('ยังไม่มีแชท ถามอะไรสักอย่างแล้วแชทจะมาอยู่ที่นี่', 'No chats yet. Ask something and it will show up here')}
@@ -146,7 +145,7 @@ export function ChatListSheet({
           ) : (
             groups.map(({ group, rows }) => (
               <View key={group}>
-                <Text style={{ fontSize: 10.5, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', color: ai.faded, paddingHorizontal: 8, paddingTop: 14, paddingBottom: 4 }}>
+                <Text style={{ fontSize: 15, color: ai.faded, paddingTop: 22, paddingBottom: 6 }}>
                   {threadGroupLabel(group, language)}
                 </Text>
                 {rows.map((conversation) => {
@@ -160,18 +159,22 @@ export function ChatListSheet({
                       onLongPress={() => openMenu(conversation)}
                       style={({ pressed }) => ({
                         flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        paddingHorizontal: 10,
-                        paddingVertical: 8,
-                        borderRadius: 12,
-                        backgroundColor: active ? ai.surface : pressed ? 'rgba(255,255,255,0.6)' : 'transparent',
-                        borderWidth: 2,
-                        borderColor: active ? 'rgba(251,146,60,0.6)' : 'transparent',
-                        marginBottom: 2,
+                        alignItems: 'flex-start',
+                        gap: 14,
+                        paddingVertical: 13,
+                        paddingRight: 4,
+                        opacity: pressed ? 0.6 : 1,
                       })}
                     >
+                      <View
+                        style={{
+                          width: 9,
+                          height: 9,
+                          borderRadius: 5,
+                          marginTop: 8,
+                          backgroundColor: active ? ai.orange : '#c9c4bc',
+                        }}
+                      />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         {isEditing ? (
                           <TextInput
@@ -184,19 +187,29 @@ export function ChatListSheet({
                             selectTextOnFocus
                             returnKeyType="done"
                             accessibilityLabel={t('ชื่อแชท', 'Chat title')}
-                            style={{ fontSize: 13, lineHeight: 18, color: ai.ink, paddingVertical: 0, borderBottomWidth: 1.5, borderBottomColor: ai.orange }}
+                            style={{ fontSize: 18, lineHeight: 25, color: ai.ink, paddingVertical: 0, borderBottomWidth: 1.5, borderBottomColor: ai.orange }}
                           />
                         ) : (
-                          <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 18, fontWeight: '500', color: ai.ink }}>
+                          <Text numberOfLines={2} style={{ fontSize: 18, lineHeight: 25, fontWeight: '600', color: ai.ink }}>
                             {conversation.title || t('แชทไม่มีชื่อ', 'Untitled chat')}
                           </Text>
                         )}
-                        <Text style={{ fontSize: 11, lineHeight: 15, color: ai.faded }}>
-                          {isEditing ? t('พิมพ์ชื่อใหม่แล้วกด Done', 'Type a new name, then Done') : threadStamp(conversation.updated_at, language)}
+                        <Text style={{ fontSize: 13.5, lineHeight: 19, color: ai.faded, marginTop: 1 }}>
+                          {isEditing
+                            ? t('พิมพ์ชื่อใหม่แล้วกด Done', 'Type a new name, then Done')
+                            : active
+                              ? t(`เปิดอยู่ · ${threadStamp(conversation.updated_at, language)}`, `Open · ${threadStamp(conversation.updated_at, language)}`)
+                              : threadStamp(conversation.updated_at, language)}
                         </Text>
                       </View>
-                      <Pressable accessibilityRole="button" accessibilityLabel={t('ตัวเลือก', 'Options')} hitSlop={8} onPress={() => openMenu(conversation)} style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
-                        <AppIcon name="ellipsis-horizontal" size={16} color={ai.faded} />
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('ตัวเลือก', 'Options')}
+                        hitSlop={10}
+                        onPress={() => openMenu(conversation)}
+                        style={{ width: 30, height: 30, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}
+                      >
+                        <AppIcon name="ellipsis-horizontal" size={18} color="#c9c4bc" />
                       </Pressable>
                     </Pressable>
                   );
@@ -205,6 +218,54 @@ export function ChatListSheet({
             ))
           )}
         </ScrollView>
+
+        {/* The two things this screen is for, within reach of a thumb. */}
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('ค้นหาแชท', 'Search chats')}
+            onPress={() => setSearching((current) => !current)}
+            style={({ pressed }) => ({
+              width: 52,
+              height: 52,
+              borderRadius: 26,
+              backgroundColor: ai.surface,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.85 : 1,
+              shadowColor: '#3d2b1f',
+              shadowOpacity: 0.16,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 6,
+            })}
+          >
+            <AppIcon name="search-outline" size={22} color={ai.ink} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('แชทใหม่', 'New chat')}
+            onPress={() => { onClose(); onNew(); }}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              height: 52,
+              paddingHorizontal: 22,
+              borderRadius: 26,
+              backgroundColor: '#1f1a17',
+              opacity: pressed ? 0.85 : 1,
+              shadowColor: '#3d2b1f',
+              shadowOpacity: 0.22,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 5 },
+              elevation: 8,
+            })}
+          >
+            <AppIcon name="add" size={22} color="#ffffff" />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>{t('แชทใหม่', 'New chat')}</Text>
+          </Pressable>
+        </View>
       </View>
     </BottomSheet>
   );
