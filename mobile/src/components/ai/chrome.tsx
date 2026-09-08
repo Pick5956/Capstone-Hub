@@ -76,8 +76,15 @@ export function GlassButton({
       style={({ pressed }) => ({
         width: size,
         height: size,
+        borderRadius: size / 2,
         transform: [{ translateY: pressed ? -1 : 0 }],
         opacity: pressed && LIQUID_GLASS ? 0.85 : 1,
+        // Whatever is behind the header is blurred, so the button needs its own
+        // edge to read as an object rather than part of the haze.
+        shadowColor: '#3d2b1f',
+        shadowOpacity: 0.16,
+        shadowRadius: 7,
+        shadowOffset: { width: 0, height: 2 },
       })}
     >
       {LIQUID_GLASS ? (

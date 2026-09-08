@@ -523,16 +523,17 @@ export default function AIAssistantScreen() {
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' }}
       />
       {/* The header's backdrop is the blur itself, faded out — not a panel laid
-          over the chat. iOS has no blur that weakens with distance, so the blurred
-          copy is masked by a gradient: full strength at the top, gone by the
-          bottom, with no edge anywhere. The buttons stay the only real glass. */}
+          over the chat. iOS has no blur that weakens with distance, so a blurred
+          copy is masked by a gradient: full strength behind the buttons, gone a
+          little below them. A light wash rides inside the same mask, just enough
+          for the chat's name and the buttons to stand clear of what is passing. */}
       <MaskedView
         pointerEvents="none"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 46, zIndex: 2 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: headerHeight + 14, zIndex: 2 }}
         maskElement={
           <LinearGradient
-            colors={['#000000', '#000000', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0)']}
-            locations={[0, 0.5, 0.8, 1]}
+            colors={['#000000', '#000000', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0)']}
+            locations={[0, 0.62, 0.85, 1]}
             style={{ flex: 1 }}
           />
         }
@@ -542,7 +543,7 @@ export default function AIAssistantScreen() {
           style={{ flex: 1 }}
           fallbackStyle={{ backgroundColor: 'rgba(250,248,242,0.9)' }}
         >
-          <View />
+          <View style={{ flex: 1, backgroundColor: 'rgba(250,248,242,0.42)' }} />
         </GlassSurface>
       </MaskedView>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingRight: 14, gap: 8, zIndex: 3 }}>
