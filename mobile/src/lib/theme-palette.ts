@@ -16,6 +16,13 @@ export const palette = {
   placeholder: '#76503D',
   primary: '#C2410C',
   primaryText: '#FFFFFF',
+  // The brand orange as TEXT on a pale tint of itself. `primary` is tuned to
+  // carry white on top of it, and at that lightness it only reaches 4.43:1 as
+  // ink on its own soft fill — just under AA. This is the same hue one step
+  // down, which measures 5.34:1 there and is near-indistinguishable beside it.
+  primaryInk: '#AC3A0B',
+  // The pale wash of the brand orange used as a glass button's fill.
+  primaryWash: 'rgba(253, 232, 217, 0.92)',
   accent: '#C2410C',
   accentSoft: '#FFF7ED',
   accentMuted: '#FED7AA',

@@ -67,6 +67,11 @@ export default function BillScreen() {
   const canViewOrders = can(activeMembership, 'view_orders');
   const canAccessBill = canViewOrders || canTakeOrder || canPay;
   const [bill, setBill] = useState<Bill | null>(null);
+  // Set when a post-mutation re-read fails, so the totals on screen are known to
+  // be behind the server. `pay()` sends `bill.grand_total` as the amount received
+  // for a cash payment, so paying from a stale bill records money that was never
+  // taken and change that was never given.
+  const [billStale, setBillStale] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState('all');
@@ -154,7 +159,9 @@ export default function BillScreen() {
     setMessage(successMessage);
     try {
       setBill(await getBill(orderId));
+      setBillStale(false);
     } catch (err) {
+      setBillStale(true);
       setError(err instanceof Error
         ? copy(`${successMessage} แต่โหลดบิลล่าสุดไม่สำเร็จ: ${err.message}`, `${successMessage}, but the latest bill could not be loaded: ${err.message}`)
         : copy(`${successMessage} แต่โหลดบิลล่าสุดไม่สำเร็จ`, `${successMessage}, but the latest bill could not be loaded`));
@@ -350,7 +357,7 @@ export default function BillScreen() {
       label={copy('ยืนยันรับชำระเงิน', 'Confirm payment')}
       onPress={pay}
       loading={saving}
-      disabled={!paymentReady || editing || (method === 'promptpay_qr' && !bill.promptpay_qr_image)}
+      disabled={!paymentReady || editing || billStale || (method === 'promptpay_qr' && !bill.promptpay_qr_image)}
     />
   );
   const exitAction = <Button icon="arrow-back" label={exitLabel} onPress={exitBill} />;

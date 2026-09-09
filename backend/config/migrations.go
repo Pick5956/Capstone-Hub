@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 26
+	CurrentSchemaVersion int64 = 27
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -505,6 +505,49 @@ func schemaMigrationPlan() []SchemaMigration {
 				} {
 					if err := ctx.DB.Exec(statement).Error; err != nil {
 						return fmt.Errorf("add reservation guest count: %w", err)
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 27,
+			Name:    "reservation_one_active_slot",
+			Up: func(ctx *MigrationContext) error {
+				// The backfill is not optional. Until now nothing stopped the same
+				// booking being filed twice, so live databases already hold
+				// duplicates — and CREATE UNIQUE INDEX on those fails, which would
+				// take the backend down on boot rather than at deploy time.
+				//
+				// The oldest row of each group survives because it is the one the
+				// staff saw succeed; the later copies are the accidental repeats.
+				// They are cancelled rather than deleted so the history screen can
+				// still show what happened, which is the whole point of this table.
+				//
+				// Holds are excluded throughout: `reserved_for IS NULL` rows are
+				// the table's current hold, at most one of which is meaningful, and
+				// reconcileActiveReservationsForUpdate already owns that case.
+				for _, statement := range []string{
+					`UPDATE reservations AS duplicate
+					    SET status = 'cancelled', resolved_at = NOW(), updated_at = NOW()
+					  WHERE duplicate.status = 'active'
+					    AND duplicate.reserved_for IS NOT NULL
+					    AND duplicate.deleted_at IS NULL
+					    AND EXISTS (
+					        SELECT 1 FROM reservations AS kept
+					         WHERE kept.restaurant_id = duplicate.restaurant_id
+					           AND kept.table_id = duplicate.table_id
+					           AND kept.reserved_for = duplicate.reserved_for
+					           AND kept.status = 'active'
+					           AND kept.deleted_at IS NULL
+					           AND kept.id < duplicate.id
+					    )`,
+					`CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_one_active_slot
+					     ON reservations (restaurant_id, table_id, reserved_for)
+					  WHERE reserved_for IS NOT NULL AND status = 'active' AND deleted_at IS NULL`,
+				} {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("enforce one active reservation per slot: %w", err)
 					}
 				}
 				return nil

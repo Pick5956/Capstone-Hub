@@ -94,7 +94,11 @@ export default function NewOrderScreen() {
   const [reserveName, setReserveName] = useState('');
   const [reservePhone, setReservePhone] = useState('');
   const [reserveDay, setReserveDay] = useState<ReservationDay>('today');
-  const [reserveSlot, setReserveSlot] = useState('19:00');
+  // Seeded from the helper, never from a literal. `reservationTimeSlots` drops
+  // times that have already passed, so a hardcoded '19:00' is simply absent from
+  // the list after 19:00 — the picker then renders blank and Confirm files the
+  // booking at a time earlier today.
+  const [reserveSlot, setReserveSlot] = useState(() => defaultReservationSlot('today', new Date()));
   const [reserving, setReserving] = useState(false);
   const [reserveError, setReserveError] = useState<string | null>(null);
   const reserveSlots = reservationTimeSlots(reserveDay, new Date());
@@ -180,6 +184,15 @@ export default function NewOrderScreen() {
     // reject never leaves this sheet.
     if (reservePhone.replace(/\D/g, '').length < 9) {
       setReserveError(copy('กรอกเบอร์โทรอย่างน้อย 9 หลัก', 'Enter a phone number with at least 9 digits.'));
+      return;
+    }
+    // The list is recomputed from the clock on every render, so a slot chosen a
+    // few minutes ago can drop out of it while this sheet is open — and
+    // `defaultReservationSlot` itself falls back to '19:00' once the day has no
+    // bookable time left. Refusing here is the difference between saying so and
+    // silently filing a booking in the past.
+    if (reserveDay !== 'now' && !reserveSlots.includes(reserveSlot)) {
+      setReserveError(copy('เวลาที่เลือกผ่านไปแล้ว เลือกเวลาใหม่', 'That time has already passed. Choose another.'));
       return;
     }
     const instant = reservationInstant(reserveDay, reserveSlot, new Date());

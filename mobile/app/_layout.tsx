@@ -118,11 +118,15 @@ function AppNavigator() {
           <Stack.Screen name="invite/[token]" />
           <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
           {/*
-            Reservation history is reached from the table screens, the way the
-            web opens it as a modal over /pos/tables and /tables, rather than
-            from a menu entry of its own.
+            Reservation history is reached from the table screens rather than
+            from a menu entry of its own. It used to carry `presentation: 'modal'`
+            to mirror how the web opens it over /pos/tables — but on a phone a
+            modal is the sheet that slides up from the bottom over a dimmed
+            backdrop, which is the grammar for "a decision to make before you can
+            go on". This is a screen you walk into and back out of, so it takes
+            the stack's own slide-from-the-right like every other push.
           */}
-          <Stack.Screen name="reservations" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="reservations" />
           <Stack.Screen name="table-reservation" />
           <Stack.Screen name="table-management" />
           <Stack.Screen name="table-management/table" />

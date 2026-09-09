@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"time"
 
 	"Project-M/internal/entity"
@@ -137,6 +138,73 @@ func (r *TableRepository) ReconcileActiveReservationsForUpdate(restaurantID, tab
 	return reconcileActiveReservationsForUpdate(r.db, restaurantID, tableID)
 }
 
+// FindReservation reads one booking by its own id WITHOUT locking it.
+//
+// It exists so a caller can learn which table a booking belongs to before it
+// takes any lock at all. Every path in this codebase that holds both rows locks
+// restaurant_tables first, so a caller that needs the table id out of the
+// reservation cannot get it by locking the reservation — that is the inverted
+// order, and it deadlocks against every other path. Read here, lock the table,
+// then lock the reservation.
+func (r *TableRepository) FindReservation(restaurantID, reservationID uint) (*entity.Reservation, error) {
+	var reservation entity.Reservation
+	err := r.db.
+		Where("restaurant_id = ? AND id = ?", restaurantID, reservationID).
+		First(&reservation).Error
+	if err != nil {
+		return nil, err
+	}
+	return &reservation, nil
+}
+
+// FindReservationForUpdate locks one booking by its own id. Every other
+// reservation lookup here is keyed by table, which only works while a table can
+// hold at most one booking — a scheduled booking breaks that, so resolving one
+// has to address the row itself.
+//
+// Callers that also touch the booking's table MUST lock the table first. See
+// FindReservation.
+func (r *TableRepository) FindReservationForUpdate(restaurantID, reservationID uint) (*entity.Reservation, error) {
+	var reservation entity.Reservation
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("restaurant_id = ? AND id = ?", restaurantID, reservationID).
+		First(&reservation).Error
+	if err != nil {
+		return nil, err
+	}
+	return &reservation, nil
+}
+
+// FindScheduledReservationForUpdate returns the active booking already held for
+// this table at this exact instant, or nil when the slot is free.
+//
+// The caller must hold the table row lock (FindTableForUpdate) first. That lock
+// is what makes the check-then-insert around this safe: two staff booking the
+// same table at once both queue on the table row, so the second one sees the
+// first one's row instead of racing past it.
+func (r *TableRepository) FindScheduledReservationForUpdate(restaurantID, tableID uint, reservedFor time.Time) (*entity.Reservation, error) {
+	var reservation entity.Reservation
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where(
+			"restaurant_id = ? AND table_id = ? AND status = ? AND reserved_for = ?",
+			restaurantID,
+			tableID,
+			entity.ReservationStatusActive,
+			reservedFor,
+		).
+		Order("id asc").
+		First(&reservation).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &reservation, nil
+}
+
 func (r *TableRepository) UpdateReservation(reservation *entity.Reservation) error {
 	return r.db.Omit(clause.Associations).Save(reservation).Error
 }
@@ -248,6 +316,28 @@ func (r *TableRepository) UpdateTag(tag *entity.TableTag) error {
 
 func (r *TableRepository) DeleteTag(tag *entity.TableTag) error {
 	return r.db.Delete(tag).Error
+}
+
+// TableNumberTaken reports whether a label is already used in this restaurant.
+//
+// Sequences run per zone, but `table_number` is unique across the whole
+// restaurant, so two zones can independently arrive at the same label — the
+// zone-less numbering is `T<n>` and a zone whose prefix is "T" numbers `T%02d`,
+// which collide from 10 onwards. Without this check the insert fails on the
+// unique index and the owner is told the table already exists while looking at a
+// screen that does not show one.
+//
+// Soft-deleted rows are excluded, matching the partial unique index they are
+// also excluded from, so a deleted table's label can be used again.
+func (r *TableRepository) TableNumberTaken(restaurantID uint, tableNumber string) (bool, error) {
+	var id uint
+	result := r.db.
+		Model(&entity.RestaurantTable{}).
+		Select("id").
+		Where("restaurant_id = ? AND table_number = ?", restaurantID, tableNumber).
+		Limit(1).
+		Scan(&id)
+	return result.RowsAffected > 0, result.Error
 }
 
 func (r *TableRepository) NextSequence(restaurantID uint, zoneID *uint) (int, error) {

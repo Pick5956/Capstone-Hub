@@ -142,6 +142,12 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// Version 26 adds guest_count to Reservation, again inside the frozen
 		// registry, so the fingerprint advances with the column.
 		26: "381840175afa65b561866fd5d184fea3913b6fa794d6380b282dfbf03c70eee9",
+		// Version 27 adds no column. It puts a partial unique index across
+		// Reservation's (restaurant_id, table_id, reserved_for) so one table
+		// cannot hold two active bookings for the same instant, and the index
+		// tags live on fields in the frozen registry, so the fingerprint advances
+		// even though the only DDL is CREATE UNIQUE INDEX plus its backfill.
+		27: "359a653ff6994b5a81b9f8678f0d97a9114a4bcc57a254637a0952a38841fe63",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

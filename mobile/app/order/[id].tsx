@@ -8,10 +8,9 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { Button, Divider, EmptyState, Feedback, IconButton, SearchField, SectionHeader, Select, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, Divider, EmptyState, Feedback, GlassLayer, IconButton, SearchField, SectionHeader, Select, StatusBadge, Surface } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import {
-  CURRENT_ROUND_BAR_COLORS,
   createOrderDetailRequestGuard,
   currentRoundPresentation,
   orderSummaryPresentation,
@@ -28,7 +27,7 @@ import { createRequestGeneration } from '@/src/lib/request-generation';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, controlShadow, palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
 import type { Order, OrderItem } from '@/src/types/order';
 
@@ -95,35 +94,45 @@ function CurrentRoundBasket({
         accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
+        // The same shape and material as every other primary action: radius.md
+        // and the app's control lift, rather than this bar's own 8pt corner and
+        // hand-rolled drop shadow. It was the last control still styled to its
+        // own rules.
         style={({ pressed }) => ({
-          height: 56,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: spacing.lg,
-          borderWidth: 1,
-          borderColor: CURRENT_ROUND_BAR_COLORS.borderColor,
-          borderRadius: 8,
-          backgroundColor: CURRENT_ROUND_BAR_COLORS.backgroundColor,
-          paddingHorizontal: spacing.lg,
-          shadowColor: palette.shadow,
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.18,
-          shadowRadius: 6,
-          elevation: 4,
+          borderRadius: radius.md,
+          ...controlShadow,
           opacity: disabled ? 0.5 : pressed ? 0.82 : 1,
           transform: [{ scale: pressed ? 0.992 : 1 }],
         })}
       >
+        <GlassLayer
+          style={{
+            height: 56,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: spacing.lg,
+            borderRadius: radius.md,
+            paddingHorizontal: spacing.lg,
+          }}
+          // The same pale wash and orange ink as the add-to-order button, so the
+          // two primary actions in this flow are one thing. `primaryInk`, not
+          // `primary`, because the brand orange as text on its own soft fill
+          // measures 4.43:1 — under AA.
+          tint={palette.primaryWash}
+          fallback={palette.primaryWash}
+          fallbackBorder={palette.controlBorder}
+        >
         <View style={{ minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-          <AppIcon color={CURRENT_ROUND_BAR_COLORS.foregroundColor} name="basket-outline" size={20} />
-          <Text numberOfLines={1} style={{ minWidth: 0, flex: 1, color: CURRENT_ROUND_BAR_COLORS.foregroundColor, fontSize: 14, fontWeight: '700' }}>
+          <AppIcon color={palette.primaryInk} name="basket-outline" size={20} />
+          <Text numberOfLines={1} style={{ minWidth: 0, flex: 1, color: palette.primaryInk, fontSize: 14, fontWeight: '700' }}>
             {label}
           </Text>
         </View>
-        <Text numberOfLines={1} style={{ color: CURRENT_ROUND_BAR_COLORS.foregroundColor, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text numberOfLines={1} style={{ color: palette.primaryInk, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
           {value}
         </Text>
+        </GlassLayer>
       </Pressable>
     </View>
   );

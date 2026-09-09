@@ -93,6 +93,31 @@ export function formatReservationClock(
   return `${when.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
 }
 
+/**
+ * The clock alone, for the compact table tile's booking chip.
+ *
+ * Never the date, unlike `formatReservationClock`. The tile is about 112pt wide,
+ * and a `3 ก.ย. 19:00` chip pushes the Thai status word into an ellipsis —
+ * `กำลังใช้งาน` becomes `กำลังใช้...`, which is the one thing on the tile that
+ * has to stay readable. Dropping the date costs almost nothing here because the
+ * backend only surfaces bookings inside a −1h..+12h window, so it is today's in
+ * everything but the post-midnight case, and the detail screen carries the full
+ * date anyway.
+ */
+export function reservationClock(
+  value: string | null | undefined,
+  language: 'th' | 'en' = 'th',
+): string | null {
+  if (!value) return null;
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime())) return null;
+  return when.toLocaleTimeString(language === 'th' ? 'th-TH' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 /** The slot to preselect: the next one still bookable today. */
 export function defaultReservationSlot(day: ReservationDay, now: Date): string {
   const slots = reservationTimeSlots(day, now);
